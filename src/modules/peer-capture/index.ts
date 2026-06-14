@@ -117,6 +117,12 @@ export const peerCaptureModule: ExtensionModule = {
       // sellerCredential capture is handled by the seller flow (added later).
     });
     registerInterceptor();
+    // Payment-platform hosts are optional permissions granted on demand. A
+    // webRequest listener registered before the grant won't observe the new
+    // host until it's re-added — so re-register whenever a permission is added.
+    // Without this, the FIRST capture on a freshly-granted platform (e.g. the
+    // user's first Cash App buy) silently never fires.
+    chrome.permissions.onAdded.addListener(() => registerInterceptor());
     chrome.alarms.onAlarm.addListener((alarm) => {
       if (alarm.name === EXPIRY_ALARM) void sweepExpired();
     });

@@ -83,54 +83,67 @@ async function maybeComplete(requestId: string): Promise<void> {
   onCaptureComplete?.(updated);
 }
 
+// Stable listener references so the registration is idempotent and removable.
+const onBeforeRequestListener = (
+  details: chrome.webRequest.OnBeforeRequestDetails,
+): chrome.webRequest.BlockingResponse | undefined => {
+  if (details.tabId < 0) return undefined;
+  void (async () => {
+    const session = await findSessionByAuthTab(details.tabId);
+    if (!session || !matchesTemplate(session, details.url, details.method)) return;
+    const existing = inflight.get(details.requestId) ?? {
+      authTabId: details.tabId,
+      sessionRequestId: session.requestId,
+      url: details.url,
+      method: details.method,
+    };
+    existing.body = decodeBody(details.requestBody);
+    inflight.set(details.requestId, existing);
+    await maybeComplete(details.requestId);
+  })();
+  return undefined;
+};
+
+const onBeforeSendHeadersListener = (
+  details: chrome.webRequest.OnBeforeSendHeadersDetails,
+): chrome.webRequest.BlockingResponse | undefined => {
+  if (details.tabId < 0) return undefined;
+  void (async () => {
+    const session = await findSessionByAuthTab(details.tabId);
+    if (!session || !matchesTemplate(session, details.url, details.method)) return;
+    const headers: Record<string, string> = {};
+    for (const header of details.requestHeaders ?? []) {
+      if (header.name && header.value != null) headers[header.name] = header.value;
+    }
+    const existing = inflight.get(details.requestId) ?? {
+      authTabId: details.tabId,
+      sessionRequestId: session.requestId,
+      url: details.url,
+      method: details.method,
+    };
+    existing.headers = headers;
+    inflight.set(details.requestId, existing);
+    await maybeComplete(details.requestId);
+  })();
+  return undefined;
+};
+
+/**
+ * Register the capture webRequest listeners. IDEMPOTENT and safe to re-call.
+ *
+ * Re-registration is load-bearing: payment-platform hosts (cash.app, venmo, …)
+ * are `optional_host_permissions`, granted on demand. A webRequest listener
+ * registered BEFORE a host permission is granted does NOT observe that host —
+ * Chrome only applies the new permission once the listener is re-added. So we
+ * re-call this on `chrome.permissions.onAdded` (see peer-capture/index.ts).
+ * Without that, capture on a freshly-granted platform silently never fires.
+ */
 export function registerInterceptor(): void {
+  // Remove any prior registration first so re-calls don't double-fire.
+  try { chrome.webRequest.onBeforeRequest.removeListener(onBeforeRequestListener); } catch { /* not registered */ }
+  try { chrome.webRequest.onBeforeSendHeaders.removeListener(onBeforeSendHeadersListener); } catch { /* not registered */ }
+
   const filter: chrome.webRequest.RequestFilter = { urls: allCapturePatterns() };
-
-  chrome.webRequest.onBeforeRequest.addListener(
-    (details): chrome.webRequest.BlockingResponse | undefined => {
-      if (details.tabId < 0) return undefined;
-      void (async () => {
-        const session = await findSessionByAuthTab(details.tabId);
-        if (!session || !matchesTemplate(session, details.url, details.method)) return;
-        const existing = inflight.get(details.requestId) ?? {
-          authTabId: details.tabId,
-          sessionRequestId: session.requestId,
-          url: details.url,
-          method: details.method,
-        };
-        existing.body = decodeBody(details.requestBody);
-        inflight.set(details.requestId, existing);
-        await maybeComplete(details.requestId);
-      })();
-      return undefined;
-    },
-    filter,
-    ['requestBody'],
-  );
-
-  chrome.webRequest.onBeforeSendHeaders.addListener(
-    (details): chrome.webRequest.BlockingResponse | undefined => {
-      if (details.tabId < 0) return undefined;
-      void (async () => {
-        const session = await findSessionByAuthTab(details.tabId);
-        if (!session || !matchesTemplate(session, details.url, details.method)) return;
-        const headers: Record<string, string> = {};
-        for (const header of details.requestHeaders ?? []) {
-          if (header.name && header.value != null) headers[header.name] = header.value;
-        }
-        const existing = inflight.get(details.requestId) ?? {
-          authTabId: details.tabId,
-          sessionRequestId: session.requestId,
-          url: details.url,
-          method: details.method,
-        };
-        existing.headers = headers;
-        inflight.set(details.requestId, existing);
-        await maybeComplete(details.requestId);
-      })();
-      return undefined;
-    },
-    filter,
-    ['requestHeaders', 'extraHeaders'],
-  );
+  chrome.webRequest.onBeforeRequest.addListener(onBeforeRequestListener, filter, ['requestBody']);
+  chrome.webRequest.onBeforeSendHeaders.addListener(onBeforeSendHeadersListener, filter, ['requestHeaders', 'extraHeaders']);
 }
