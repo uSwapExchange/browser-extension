@@ -22,7 +22,7 @@ const USWAP_APP_ORIGINS = [
 
 export default defineManifest({
   manifest_version: 3,
-  name: 'uSwap',
+  name: 'uSwap — Anything in, anything out: Verify Payments Securely',
   version: pkg.version,
   description: 'uSwap in your browser — instant crypto swaps, fiat onramp payment capture, and checkout tools.',
   icons: {
