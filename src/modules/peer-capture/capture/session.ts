@@ -25,7 +25,8 @@ export interface CapturedRequest {
 
 export interface CaptureSession {
   requestId: string;
-  originTabId: number;
+  /** Routing key of the frame that called authenticate (connKeyForSender). */
+  connectionKey: string;
   origin: string;
   platform: string;
   actionType: string;
@@ -66,10 +67,10 @@ export async function wipeSession(requestId: string): Promise<void> {
   await sessionRemove(key(requestId));
 }
 
-/** Remove any existing session for an origin tab — a new authenticate supersedes it. */
-export async function supersedeForTab(originTabId: number): Promise<void> {
+/** Remove any existing session for a connection — a new authenticate supersedes it. */
+export async function supersedeForConnection(connectionKey: string): Promise<void> {
   const sessions = await listSessions();
   await Promise.all(
-    sessions.filter((s) => s.originTabId === originTabId).map((s) => wipeSession(s.requestId)),
+    sessions.filter((s) => s.connectionKey === connectionKey).map((s) => wipeSession(s.requestId)),
   );
 }

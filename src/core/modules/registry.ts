@@ -8,8 +8,12 @@ import type { BusEvent, ModuleId } from '../bus/protocol.js';
  */
 
 export interface ModuleContext {
-  /** Push an event to the relay port of a specific tab (e.g. metadata messages). */
-  pushToTab(tabId: number, event: BusEvent): boolean;
+  /**
+   * Push an event to the relay port of a specific connection (the frame that
+   * called window.peer), keyed by connKeyForSender. Returns false if no live
+   * port — e.g. the originating frame navigated away.
+   */
+  pushToConnection(connectionKey: string, event: BusEvent): boolean;
 }
 
 export type ModuleHandler = (

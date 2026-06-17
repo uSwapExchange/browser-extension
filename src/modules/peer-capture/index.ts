@@ -1,5 +1,6 @@
 import type { ExtensionModule, ModuleContext } from '../../core/modules/registry.js';
-import { busEvent } from '../../core/bus/protocol.js';
+import { busEvent, connKeyForSender } from '../../core/bus/protocol.js';
+import { FIRST_PARTY_ORIGIN, isFirstPartySender } from '../../core/sender.js';
 import { extensionVersion } from '../../core/version.js';
 import { hasOpenPrompt, openPrompt } from '../../core/consent/prompt.js';
 import { isOriginGranted } from '../../core/storage/origin-grants.js';
@@ -14,7 +15,7 @@ import { hostsForPlatform } from './templates/platforms.js';
 import { registerInterceptor, setCaptureCompleteHandler } from './capture/interceptor.js';
 import {
   putSession,
-  supersedeForTab,
+  supersedeForConnection,
   wipeSession,
   listSessions,
   type CaptureSession,
@@ -25,6 +26,9 @@ const CAPTURE_TTL_MS = 10 * 60 * 1000;
 const EXPIRY_ALARM = 'peer-capture:expiry';
 
 function senderOrigin(sender: chrome.runtime.MessageSender): string {
+  // First-party surfaces (the side panel hosting the app) are attributed to the
+  // canonical app origin, not chrome-extension://<id>.
+  if (isFirstPartySender(sender)) return FIRST_PARTY_ORIGIN;
   const origin = sender.origin ?? (sender.url ? new URL(sender.url).origin : null);
   if (!origin) throw new Error('Cannot resolve sender origin');
   return origin;
@@ -33,7 +37,7 @@ function senderOrigin(sender: chrome.runtime.MessageSender): string {
 let ctx: ModuleContext | null = null;
 
 function deliverMetadata(session: CaptureSession, message: PeerMetadataMessage): void {
-  ctx?.pushToTab(session.originTabId, busEvent('peer-capture', PEER_TYPES.metadataMessage, message));
+  ctx?.pushToConnection(session.connectionKey, busEvent('peer-capture', PEER_TYPES.metadataMessage, message));
 }
 
 async function ensurePlatformPermission(platform: string, origin: string): Promise<void> {
@@ -53,9 +57,13 @@ async function ensurePlatformPermission(platform: string, origin: string): Promi
 
 async function startAuthenticate(params: PeerAuthenticateParams, sender: chrome.runtime.MessageSender): Promise<void> {
   const origin = senderOrigin(sender);
-  const originTabId = sender.tab?.id;
-  if (typeof originTabId !== 'number') throw new Error('authenticate must originate from a tab');
-  if (!(await isOriginGranted(origin))) {
+  // Route by connection (documentId), not tab — the uSwap app may be running in
+  // the Firefox sidebar / side panel, which isn't a tab.
+  const connectionKey = connKeyForSender(sender);
+  if (!connectionKey) throw new Error('authenticate must originate from a page');
+  // First-party surfaces (the side panel) are implicitly connected — the website
+  // consent gate only applies to external pages calling window.peer.
+  if (!isFirstPartySender(sender) && !(await isOriginGranted(origin))) {
     throw new Error('Origin is not connected — call requestConnection() first');
   }
 
@@ -66,12 +74,12 @@ async function startAuthenticate(params: PeerAuthenticateParams, sender: chrome.
     providerConfig: params.providerConfig,
   });
 
-  await supersedeForTab(originTabId);
+  await supersedeForConnection(connectionKey);
   const authTab = await chrome.tabs.create({ url: template.authLink });
   const now = Date.now();
   const session: CaptureSession = {
     requestId: crypto.randomUUID(),
-    originTabId,
+    connectionKey,
     origin,
     platform: params.platform,
     actionType: params.actionType,
@@ -133,6 +141,7 @@ export const peerCaptureModule: ExtensionModule = {
     },
 
     async [PEER_TYPES.checkConnectionStatus](_payload, sender): Promise<PeerConnectionStatus> {
+      if (isFirstPartySender(sender)) return 'connected';
       const origin = senderOrigin(sender);
       if (await isOriginGranted(origin)) return 'connected';
       if (await hasOpenPrompt(origin, 'connect')) return 'pending';
@@ -140,6 +149,7 @@ export const peerCaptureModule: ExtensionModule = {
     },
 
     async [PEER_TYPES.requestConnection](_payload, sender): Promise<boolean> {
+      if (isFirstPartySender(sender)) return true;
       const origin = senderOrigin(sender);
       if (await isOriginGranted(origin)) return true;
       return openPrompt({ kind: 'connect', origin });

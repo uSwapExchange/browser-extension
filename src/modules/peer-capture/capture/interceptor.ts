@@ -1,4 +1,5 @@
 import { allCapturePatterns } from '../templates/platforms.js';
+import { IS_FIREFOX } from '../../../core/target.js';
 import {
   findSessionByAuthTab,
   getSession,
@@ -145,5 +146,11 @@ export function registerInterceptor(): void {
 
   const filter: chrome.webRequest.RequestFilter = { urls: allCapturePatterns() };
   chrome.webRequest.onBeforeRequest.addListener(onBeforeRequestListener, filter, ['requestBody']);
-  chrome.webRequest.onBeforeSendHeaders.addListener(onBeforeSendHeadersListener, filter, ['requestHeaders', 'extraHeaders']);
+  // `extraHeaders` is Chrome-only: Chrome needs it to expose Cookie/Authorization
+  // in onBeforeSendHeaders; Firefox includes those by default and THROWS on the
+  // unknown enum value (which would abort background startup). Branch on target.
+  const headerSpec = (IS_FIREFOX
+    ? ['requestHeaders']
+    : ['requestHeaders', 'extraHeaders']) as chrome.webRequest.OnBeforeSendHeadersOptions[];
+  chrome.webRequest.onBeforeSendHeaders.addListener(onBeforeSendHeadersListener, filter, headerSpec);
 }

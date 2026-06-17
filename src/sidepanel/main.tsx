@@ -1,10 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { installPeerBridge } from './peer-bridge.js';
 
 /**
  * The side panel IS the uSwap app: a full-bleed iframe of the real web app.
- * The peer-relay content scripts run inside the iframe (all_frames: true),
- * so window.peer and capture flows work identically here and in a tab.
+ *
+ * window.peer is bridged by the panel page itself (installPeerBridge) over
+ * postMessage ⇄ chrome.runtime — NOT by a content script injected into the
+ * iframe. This is identical on Chrome and Firefox; Firefox does not inject
+ * content scripts into an app frame parented by a moz-extension:// page, so the
+ * panel-relay is the only transport that works on both. See AGENTS.md.
  */
 
 const APP_URL: string = import.meta.env.VITE_USWAP_APP_URL
@@ -18,6 +23,12 @@ function appSrc(): string {
 
 function SidePanel(): React.ReactElement {
   const [loaded, setLoaded] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    if (iframeRef.current) installPeerBridge(iframeRef.current, APP_URL);
+  }, []);
+
   return (
     <div style={{ height: '100%', position: 'relative' }}>
       {!loaded && (
@@ -36,6 +47,7 @@ function SidePanel(): React.ReactElement {
         </div>
       )}
       <iframe
+        ref={iframeRef}
         src={appSrc()}
         title="uSwap"
         onLoad={() => setLoaded(true)}

@@ -38,6 +38,30 @@ export type BusMessage = BusRequest | BusResponse | BusEvent;
 
 export const TAB_PORT_NAME = 'uswap-ext:tab';
 
+/**
+ * Stable per-connection routing key for a content-script sender (port OR
+ * message). The relay opens its port and sends requests from the SAME document,
+ * so both carry the same key — letting the background route events back to the
+ * exact frame that called window.peer.
+ *
+ * Keyed by `documentId` (present on Chrome 106+/Firefox 106+ for content scripts
+ * in tabs AND in extension-page iframes like the side panel / sidebar), which is
+ * why this works where the old tab.id keying didn't: the Firefox sidebar isn't a
+ * tab, so `sender.tab` is undefined there. Falls back to tab+frame for any
+ * context that somehow lacks documentId.
+ */
+export function connKeyForSender(sender: chrome.runtime.MessageSender): string | null {
+  const documentId = (sender as { documentId?: string }).documentId;
+  if (documentId) return `doc:${documentId}`;
+  if (typeof sender.tab?.id === 'number') return `tab:${sender.tab.id}:${sender.frameId ?? 0}`;
+  // Extension pages (side panel / sidebar / options) have no tab and — on older
+  // engines — may lack documentId. They have a stable extension-origin url, and
+  // there is only one of each surface, so the url is a sound routing key. This
+  // is what lets the side-panel relay receive pushed events on both browsers.
+  if (sender.url) return `url:${sender.url}`;
+  return null;
+}
+
 export function newBusId(): string {
   return crypto.randomUUID();
 }

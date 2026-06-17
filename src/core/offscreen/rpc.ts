@@ -1,4 +1,5 @@
 import { ensureOffscreenDocument } from './manager.js';
+import { IS_FIREFOX } from '../target.js';
 
 /**
  * Typed request/response RPC to the offscreen document over chrome.runtime.
@@ -54,6 +55,16 @@ export async function offscreenCall<T>(
   payload: Extract<OffscreenRequest, { type: typeof type }>['payload'],
   timeoutMs = 30_000,
 ): Promise<T> {
+  // Firefox has no offscreen document; its event-page background can run the
+  // @zkp2p crypto + DOM work directly, so dispatch in-process (no RPC). The
+  // import is dynamic so the offscreen handlers (and @zkp2p/sdk) don't get
+  // pulled into the Chrome service-worker bundle, which uses the RPC path.
+  if (IS_FIREFOX) {
+    const id = nextId();
+    const { dispatchOffscreen } = await import('../../offscreen/handlers.js');
+    return (await dispatchOffscreen({ target: 'offscreen', type, id, payload } as OffscreenRequest)) as T;
+  }
+
   await ensureOffscreenDocument();
   const id = nextId();
   const request = { target: 'offscreen', type, id, payload } as OffscreenRequest;

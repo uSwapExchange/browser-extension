@@ -1,56 +1,28 @@
-# uSwap browser extension
+# @uswap/browser-extension
 
-The uSwap browser extension (Chrome MV3). The toolbar icon opens a **side panel
-hosting the real uSwap web app** — users execute full uSwap flows inside the
+The uSwap browser extension — **one source tree, two MV3 build targets: Chrome
+and Firefox.** The toolbar icon opens a **panel hosting the real uSwap web app**
+(Chrome side panel / Firefox sidebar) — users execute full uSwap flows inside the
 panel. Feature modules add browser-integration superpowers on top.
 
-Its job in one line: when you buy crypto with fiat on uSwap, the extension
-confirms — privately, on your device — that you sent the payment, so the escrow
-releases your crypto. **Plaintext session material never leaves your browser;
-only a TEE-encrypted proof is relayed.** Because that's a claim you shouldn't
-have to take on faith, this extension is open source.
+> Build target is selected at build time by `EXT_TARGET` (`chrome` default,
+> `firefox` opt-in) — there is **no separate Firefox fork**; ~95% of the code is
+> shared, and the few platform differences are branched behind a build flag
+> (`src/core/target.ts`) so the unused path is dead-code-eliminated.
 
-## Install
+## Targets
 
-A one-click **Chrome Web Store** listing is in review. Until it's approved, install
-manually from the [latest release](https://github.com/uSwapExchange/chrome-extension/releases/latest):
+| | Chrome (`dist/`) | Firefox (`dist/firefox/`) |
+|---|---|---|
+| Panel surface | `side_panel` (`chrome.sidePanel`) | `sidebar_action` (`browser.sidebarAction`) |
+| Background | MV3 service worker | MV3 event page (`background.scripts`) |
+| @zkp2p crypto + DOM parsing | offscreen document (`chrome.offscreen`) | runs **directly in the background** event page |
+| Store / distribution | Chrome Web Store (`.zip`) | AMO (`web-ext` → signed XPI) |
+| Min version | Chrome 111+ | Firefox 128+ (`world:'MAIN'` + DNR `modifyHeaders`) |
 
-1. **Download** `uswap-extension-<version>.zip` from the release Assets and **unzip** it.
-2. Open **`chrome://extensions`** (Chrome, Brave, Edge, or any Chromium browser).
-3. Toggle **Developer mode** on (top-right).
-4. Click **Load unpacked** and select the unzipped folder.
-
-The uSwap icon appears in your toolbar. Keep the unzipped folder where it is —
-deleting it removes the extension. Chrome may occasionally ask you to confirm
-developer-mode extensions; that's expected for a manual install.
-
-## Build from source
-
-```bash
-bun install
-bun run build      # → dist/  (the published zip is the contents of dist/)
-bun run package    # → uswap-extension-<version>.zip
-```
-
-The release artifact is exactly the contents of `dist/`, so you can rebuild and
-diff it against the published zip to verify what you're running.
-
-## Security model
-
-- The extension only executes code shipped in its package — **no remotely hosted
-  code** — and Chrome's MV3 CSP (`script-src self`) enforces it.
-- It reads your *own* payment confirmation using your *existing* logged-in
-  session; it never asks for, sees, or stores your password or PIN.
-- Values derived from private request material are blocked from leaving the
-  extension by a defense-in-depth guard (`src/modules/peer-capture/capture/redact.ts`).
-- Payment-platform host access is **optional**, requested only when you choose to
-  pay — the install prompt never asks for your accounts.
-
-Privacy policy: <https://uswap.net/privacy> · Support: <https://uswap.net/contact>
-
-## License
-
-[MIT](./LICENSE).
+Everything else (manifest, permissions, the bus, modules, content scripts) is
+identical. `chrome.*` aliases to `browser` on Firefox 109+, so no polyfill is
+needed for the extension to function.
 
 ## Modules
 
@@ -72,24 +44,36 @@ Privacy policy: <https://uswap.net/privacy> · Support: <https://uswap.net/conta
 
 ## Architecture
 
+`window.peer` reaches the background two ways depending on where the app runs
+(see `AGENTS.md` for the full contract + the cross-browser parity rules):
+
 ```
-page (window.peer, MAIN world)        src/content/peer-page-api.main.ts
+TAB: page (window.peer, MAIN world)   src/content/peer-page-api.main.ts
   ⇅ window.postMessage (BusRequest/BusResponse/BusEvent)
-relay (ISOLATED world)                src/content/peer-relay.content.ts
-  ⇅ chrome.runtime sendMessage + long-lived Port (per-tab event push)
-service worker                        src/background/index.ts
+     relay (ISOLATED world)           src/content/peer-relay.content.ts
+       ⇅ chrome.runtime sendMessage + long-lived Port (per-connection event push)
+
+PANEL: app (window.peer parent bridge)  reference/window-peer-bridge.ts (app-side, incl. for reference)
+  ⇅ window.postMessage to parent panel
+     panel relay                      src/sidepanel/peer-bridge.ts
+       ⇅ chrome.runtime sendMessage + long-lived Port
+       (identical on Chrome + Firefox — no content-script injection in the panel)
+
+background (SW on Chrome / event page on Firefox)   src/background/index.ts
   ├─ bus router → module handlers    src/core/bus/router.ts
-  ├─ origin grants                   src/core/storage/origin-grants.ts (chrome.storage.local)
-  ├─ capture sessions                chrome.storage.session (TRUSTED_CONTEXTS, never disk)
-  └─ offscreen doc                   @zkp2p/sdk crypto + DOM parsing (peer-capture)
+  ├─ origin grants                   src/core/storage/origin-grants.ts (storage.local)
+  ├─ capture sessions                storage.session (TRUSTED_CONTEXTS, never disk)
+  └─ @zkp2p crypto + DOM parsing     src/offscreen/handlers.ts
+       ├─ Chrome  → offscreen document (src/offscreen/offscreen.ts, via RPC)
+       └─ Firefox → run in-process in the background event page
 extension pages
-  ├─ side panel                      src/sidepanel/  — iframes the uSwap app
+  ├─ panel                           src/sidepanel/  — iframes the uSwap app
   ├─ consent prompts                 src/prompt/     — connect / inline-template approvals
-  └─ options                        src/options/    — connected-sites management
+  └─ options                         src/options/    — connected-sites management
 ```
 
-The service worker treats `sender.origin` / `sender.tab` as authoritative;
-nothing security-relevant is taken from page-supplied payloads.
+The background treats `sender.origin` / `sender.tab` as authoritative; nothing
+security-relevant is taken from page-supplied payloads.
 
 ## Security invariants (do not break)
 
@@ -97,23 +81,35 @@ nothing security-relevant is taken from page-supplied payloads.
   **never leaves the extension** — only TEE-encrypted blobs are posted to pages.
 - Inline provider templates require an explicit post-extraction approval prompt.
 - Capture is gated behind per-origin connection approval.
-- `chrome.storage.local` holds only origin grants. Capture state lives in
-  `chrome.storage.session` (memory-backed) and is wiped on completion/expiry.
+- `storage.local` holds only origin grants. Capture state lives in
+  `storage.session` (memory-backed) and is wiped on completion/expiry.
 - The extension holds no API keys; curator/maker logic stays in page/backend code.
 
 ## Develop
 
 ```bash
 bun install
-cd packages/extension
-bun run dev        # vite dev server with CRXJS HMR
-bun run build      # production build → dist/
-bun run package    # dist → uswap-extension-<version>.zip
-bun test           # unit tests (template engine, selectors, redaction)
+
+# Chrome (default target)
+bun run dev            # vite dev server with CRXJS HMR
+bun run build          # production build → dist/
+bun run package        # dist/ → uswap-extension-<version>.zip
+
+# Firefox
+bun run dev:firefox    # vite dev server, Firefox manifest
+bun run build:firefox  # production build → dist/firefox/
+bun run lint:firefox   # web-ext lint (AMO validation)
+bun run run:firefox    # launch Firefox with the extension loaded (temp add-on)
+bun run package:firefox # dist/firefox/ → signed-XPI artifact (web-ext build)
+
+bun run build:all      # both targets
+bun test               # unit tests (template engine, selectors, redaction)
 ```
 
-Load `packages/extension/dist` via chrome://extensions → "Load unpacked".
+- **Chrome:** load `dist/` via `chrome://extensions` → "Load unpacked".
+- **Firefox:** `bun run run:firefox`, or `about:debugging` → "Load Temporary
+  Add-on" → `dist/firefox/manifest.json`.
 
-The side panel embeds `VITE_USWAP_APP_URL` (default `https://app.uswap.net`,
-dev default `http://localhost:5173`). The app must allow framing by the
-extension: `Content-Security-Policy: frame-ancestors 'self' chrome-extension:`.
+The panel embeds `VITE_USWAP_APP_URL` (default `https://app.uswap.net`, dev
+default `http://localhost:5173`). The app must allow framing by the extension:
+`Content-Security-Policy: frame-ancestors 'self' chrome-extension: moz-extension:`.
