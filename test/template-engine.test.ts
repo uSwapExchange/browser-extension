@@ -5,6 +5,7 @@ import { parseProviderTemplate } from '../src/modules/peer-capture/templates/typ
 import {
   normalizePlatformTemplate,
   REVOLUT_ALL_POCKETS_AUTH_LINK,
+  REVOLUT_SEE_ALL_TRANSACTIONS_XPATH,
 } from '../src/modules/peer-capture/templates/fetch.js';
 import { extractJsonRows, jsonPathWithIndex } from '../src/modules/peer-capture/capture/extract.js';
 import { buildParams } from '../src/modules/peer-capture/capture/selectors.js';
@@ -77,9 +78,31 @@ describe('provider template parsing', () => {
       },
       authLink: 'https://app.revolut.com/home',
     });
-    expect(normalizePlatformTemplate('revolut', template).authLink)
-      .toBe(REVOLUT_ALL_POCKETS_AUTH_LINK);
+    const normalized = normalizePlatformTemplate('revolut', template);
+    expect(normalized.authLink).toBe(REVOLUT_ALL_POCKETS_AUTH_LINK);
+    expect(normalized.metadata.userInput).toMatchObject({
+      transactionXpath: REVOLUT_SEE_ALL_TRANSACTIONS_XPATH,
+      waitForXpathMs: 20_000,
+    });
     expect(template.metadata.shouldReplayRequestInPage).toBe(true);
+  });
+
+  it('preserves an upstream Revolut transaction guide when one is provided', () => {
+    const template = parseProviderTemplate({
+      ...venmoTemplate,
+      metadata: {
+        ...venmoTemplate.metadata,
+        platform: 'revolut',
+        userInput: {
+          promptText: 'Use the provider guide',
+          transactionXpath: '//button[@data-provider-guide]',
+        },
+      },
+      authLink: 'https://app.revolut.com/home',
+    });
+
+    expect(normalizePlatformTemplate('revolut', template).metadata.userInput)
+      .toEqual(template.metadata.userInput);
   });
 });
 

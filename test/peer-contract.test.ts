@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import venmoTemplate from './fixtures/venmo_transfer_venmo.json';
 import { matchesTemplate } from '../src/modules/peer-capture/capture/interceptor.js';
-import { revolutCapturePrimeUrl } from '../src/modules/peer-capture/capture/prime.js';
 import type { CaptureSession } from '../src/modules/peer-capture/capture/session.js';
 import { prepareSellerPayload } from '../src/modules/peer-capture/flows/seller.js';
 import { parseProviderTemplate } from '../src/modules/peer-capture/templates/types.js';
@@ -92,52 +91,6 @@ describe('template request matching', () => {
       'POST',
       'payment=true',
     )).toBe(true);
-  });
-});
-
-describe('Revolut deterministic capture', () => {
-  const revolutTemplate = parseProviderTemplate({
-    ...venmoTemplate,
-    authLink: 'https://app.revolut.com/home?accountType=all_main_pockets',
-    metadata: {
-      ...venmoTemplate.metadata,
-      platform: 'revolut',
-      shouldReplayRequestInPage: true,
-      metadataUrl: 'https://app.revolut.com/api/retail/user/current/transactions/last?count=20',
-      metadataUrlMethod: 'GET',
-    },
-  });
-
-  it('primes the same-origin metadata endpoint after the all-pockets page loads', () => {
-    expect(revolutCapturePrimeUrl(session({
-      platform: 'revolut',
-      template: revolutTemplate,
-    }))).toBe(
-      'https://app.revolut.com/api/retail/user/current/transactions/last?count=20',
-    );
-  });
-
-  it('does not prime other in-page providers', () => {
-    expect(revolutCapturePrimeUrl(session({
-      platform: 'chime',
-      template: {
-        ...revolutTemplate,
-        metadata: { ...revolutTemplate.metadata, platform: 'chime' },
-      },
-    }))).toBeNull();
-  });
-
-  it('rejects a cross-origin metadata endpoint', () => {
-    expect(() => revolutCapturePrimeUrl(session({
-      platform: 'revolut',
-      template: {
-        ...revolutTemplate,
-        metadata: {
-          ...revolutTemplate.metadata,
-          metadataUrl: 'https://evil.example/transactions',
-        },
-      },
-    }))).toThrow('Unsafe Revolut capture URL');
   });
 });
 
