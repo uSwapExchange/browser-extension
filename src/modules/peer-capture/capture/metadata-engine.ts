@@ -51,4 +51,3 @@ export async function resolveMetadataPayload(
   );
   return { request, response, parsed };
 }
-

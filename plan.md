@@ -9,7 +9,7 @@
 4. [x] Remove the Revolut `/api/retail/` heuristic and add a complete live-shape
    Revolut template contract test covering fallback, metadata replay, extraction,
    and selected proof index.
-5. [ ] Reconcile Chrome/Firefox listener differences, run the full validation
+5. [x] Reconcile Chrome/Firefox listener differences, run the full validation
    matrix, review the complete diff against the spec, and version the extension.
 6. [ ] Push a public PR, merge it, rebuild and scan artifacts from the exact
    merge commit, publish the release, and return the Chrome download link.

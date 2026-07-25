@@ -156,4 +156,3 @@ describe('live Revolut provider-template contract', () => {
     expect(rows[1]!.originalIndex).toBe(1);
   });
 });
-

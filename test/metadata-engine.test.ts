@@ -100,4 +100,3 @@ describe('resolveMetadataPayload', () => {
     }, async () => result(401))).rejects.toThrow('Replay failed (HTTP 401)');
   });
 });
-

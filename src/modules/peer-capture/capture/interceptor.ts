@@ -10,7 +10,6 @@ import {
 import {
   isRelevantProviderRequest,
   matchesConfiguredRequest,
-  matchesRequestCriteria,
   ProviderRequestCache,
   selectCompletedProviderContext,
   sessionRequestBody,
@@ -39,39 +38,6 @@ export function setCaptureCompleteHandler(handler: (session: CaptureSession) => 
 
 export function clearCaptureRequestCache(sessionRequestId: string): void {
   requestCache.clear(sessionRequestId);
-}
-
-/** Compatibility export used by focused contract tests. */
-export function matchesTemplate(
-  session: CaptureSession,
-  url: string,
-  method: string,
-  body = '',
-): boolean {
-  const request: ProviderRequestRecord = {
-    requestId: 'match-only',
-    tabId: session.authTabId ?? -1,
-    url,
-    method,
-    type: 'xmlhttprequest',
-    initiator: null,
-    requestBody: body,
-  };
-  const { metadata } = session.template;
-  return (
-    matchesRequestCriteria(
-      request,
-      metadata.method ?? session.template.method,
-      metadata.urlRegex,
-      metadata.bodyRegex,
-    )
-    || matchesRequestCriteria(
-      request,
-      metadata.fallbackMethod,
-      metadata.fallbackUrlRegex,
-      metadata.fallbackBodyRegex,
-    )
-  );
 }
 
 type RequestBody = chrome.webRequest.OnBeforeRequestDetails['requestBody'];
@@ -183,12 +149,7 @@ const onSendHeadersListener = (
 const onResponseStartedListener = (
   details: chrome.webRequest.OnResponseStartedDetails,
 ): void => {
-  if (
-    details.tabId < 0
-    || !relevant(details)
-    || details.statusCode < 200
-    || details.statusCode >= 300
-  ) return;
+  if (details.tabId < 0 || !relevant(details)) return;
 
   enqueue(async () => {
     const session = await findSessionByAuthTab(details.tabId);
@@ -200,6 +161,13 @@ const onResponseStartedListener = (
       responseHeaders: headersToRecord(details.responseHeaders),
       timestamp: Date.now(),
     });
+    if (details.statusCode < 200 || details.statusCode >= 300) {
+      console.warn('[peer-capture] configured provider request was not successful', {
+        platform: session.platform,
+        statusCode: details.statusCode,
+      });
+      return;
+    }
 
     const selected = selectCompletedProviderContext(
       requestCache.list(session.requestId),
