@@ -23,6 +23,8 @@ interface PartialCapture {
   sessionRequestId: string;
   url: string;
   method: string;
+  /** True when this is an auth-bearing Revolut context request, not the template endpoint itself. */
+  revolutContextOnly?: boolean;
   body?: string;
   headers?: Record<string, string>;
 }
@@ -104,6 +106,47 @@ export function matchesTemplate(
   );
 }
 
+/**
+ * Revolut's current web UI no longer consistently calls the legacy
+ * transactions endpoint in Peer's template. Any genuine current-user retail
+ * request can still provide the SPA-attached authentication context needed to
+ * replay that configured endpoint.
+ */
+export function matchesRevolutContextRequest(
+  session: CaptureSession,
+  rawUrl: string,
+  method: string,
+): boolean {
+  if (session.platform !== 'revolut' || method.toUpperCase() !== 'GET') return false;
+  try {
+    const url = new URL(rawUrl);
+    const auth = new URL(session.template.authLink);
+    return (
+      url.protocol === 'https:'
+      && url.host === auth.host
+      && url.pathname.startsWith('/api/retail/')
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Reject public/Cloudflare-only requests before they can consume the session. */
+export function hasLikelyRevolutAuth(headers: Record<string, string>): boolean {
+  for (const name of Object.keys(headers)) {
+    if (/(^|[-_])(authorization|auth|token|session|device)([-_]|$)/i.test(name)) {
+      return true;
+    }
+  }
+  const cookieEntry = Object.entries(headers)
+    .find(([name]) => name.toLowerCase() === 'cookie');
+  if (!cookieEntry) return false;
+  return cookieEntry[1]
+    .split(';')
+    .map((part) => part.trim().split('=', 1)[0] ?? '')
+    .some((name) => name !== '' && !/^(__cf|cf_)/i.test(name));
+}
+
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -136,7 +179,13 @@ const onBeforeRequestListener = (
     const session = await findSessionByAuthTab(details.tabId);
     if (!session) return;
     const body = decodeBody(details.requestBody);
-    if (!matchesTemplate(session, details.url, details.method, body)) {
+    const templateMatch = matchesTemplate(session, details.url, details.method, body);
+    const revolutContextMatch = matchesRevolutContextRequest(
+      session,
+      details.url,
+      details.method,
+    );
+    if (!templateMatch && !revolutContextMatch) {
       inflight.delete(details.requestId);
       return;
     }
@@ -146,6 +195,7 @@ const onBeforeRequestListener = (
       url: details.url,
       method: details.method,
     };
+    existing.revolutContextOnly = revolutContextMatch && !templateMatch;
     existing.body = body;
     inflight.set(details.requestId, existing);
     await maybeComplete(details.requestId);
@@ -161,22 +211,34 @@ const onBeforeSendHeadersListener = (
     const session = await findSessionByAuthTab(details.tabId);
     if (!session) return;
     const existing = inflight.get(details.requestId);
+    const revolutContextMatch = matchesRevolutContextRequest(
+      session,
+      details.url,
+      details.method,
+    );
     // onBeforeRequest runs before onBeforeSendHeaders. If it matched a
     // body-filtered template, trust that decision; otherwise only accept
     // criteria that do not require a body.
     if (
       !existing
       && !matchesTemplate(session, details.url, details.method, undefined, true)
+      && !revolutContextMatch
     ) return;
     const headers: Record<string, string> = {};
     for (const header of details.requestHeaders ?? []) {
       if (header.name && header.value != null) headers[header.name] = header.value;
+    }
+    const contextOnly = existing?.revolutContextOnly ?? revolutContextMatch;
+    if (contextOnly && !hasLikelyRevolutAuth(headers)) {
+      inflight.delete(details.requestId);
+      return;
     }
     const partial = existing ?? {
       authTabId: details.tabId,
       sessionRequestId: session.requestId,
       url: details.url,
       method: details.method,
+      revolutContextOnly: contextOnly,
     };
     partial.headers = headers;
     inflight.set(details.requestId, partial);

@@ -32,7 +32,7 @@ export function normalizePlatformTemplate(
       // Peer's reference extension expects.
       userInput: template.metadata.userInput ?? {
         promptText:
-          'Click “See all” beside Transactions so uSwap can securely verify your payment.',
+          'Open Transactions using “See all,” or refresh this Transactions page if it is already open.',
         transactionXpath: REVOLUT_SEE_ALL_TRANSACTIONS_XPATH,
         waitForXpathMs: 20_000,
         pollIntervalMs: 250,

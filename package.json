@@ -1,6 +1,6 @@
 {
   "name": "@uswap/browser-extension",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "private": true,
   "type": "module",
   "description": "uSwap browser extension (Chrome + Firefox MV3) — side panel hosting the uSwap app, and the window.peer payment-capture contract for the fiat onramp. Single source, dual target via EXT_TARGET.",
