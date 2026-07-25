@@ -115,12 +115,6 @@ function headersFromResponse(response: Response): Record<string, string> {
   return Object.fromEntries(response.headers.entries());
 }
 
-function withReplayMarker(rawUrl: string): string {
-  const url = new URL(rawUrl);
-  url.searchParams.set('replay_request', '1');
-  return url.toString();
-}
-
 /**
  * Build the request whose response is extracted. metadataUrl is a distinct
  * replay target, not merely another intercept pattern. Peer requires it to be
@@ -192,7 +186,13 @@ async function replayRequestInPage(
         };
       }
     },
-    args: [withReplayMarker(captured.url), captured.method, safe, body],
+    // Do not mutate the provider URL. Some authenticated APIs sign or
+    // authorize the exact query string; appending replay_request=1 caused
+    // otherwise valid provider requests to return 401. The capture session is
+    // moved out of awaiting_request before normal extraction replays, so the
+    // interceptor cannot recurse. Bootstrap replays are intentionally observed
+    // once to seed that transition.
+    args: [captured.url, captured.method, safe, body],
   });
   const result = results[0]?.result;
   if (!result) throw new Error('In-page replay did not return a result');
@@ -220,7 +220,7 @@ export async function replayRequest(
     init.body = captured.body;
   }
 
-  const replayUrl = withReplayMarker(captured.url);
+  const replayUrl = captured.url;
   const response = await withForbiddenHeaders(replayUrl, forbidden, () => fetch(replayUrl, init));
   const text = await response.text();
   return replayResult(response.status, text, headersFromResponse(response));
