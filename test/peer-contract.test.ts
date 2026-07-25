@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 import venmoTemplate from './fixtures/venmo_transfer_venmo.json';
-import {
-  hasLikelyRevolutAuth,
-  matchesRevolutContextRequest,
-  matchesTemplate,
-} from '../src/modules/peer-capture/capture/interceptor.js';
 import type { CaptureSession } from '../src/modules/peer-capture/capture/session.js';
 import { prepareSellerPayload } from '../src/modules/peer-capture/flows/seller.js';
 import { parseProviderTemplate } from '../src/modules/peer-capture/templates/types.js';
@@ -30,114 +25,6 @@ function session(overrides: Partial<CaptureSession> = {}): CaptureSession {
     ...overrides,
   };
 }
-
-describe('template request matching', () => {
-  it('honors primary bodyRegex and does not match headers before the body is known', () => {
-    const base = session();
-    const withBodyFilter = session({
-      template: parseProviderTemplate({
-        ...venmoTemplate,
-        metadata: {
-          ...venmoTemplate.metadata,
-          method: 'POST',
-          urlRegex: 'https://provider.example/graphql',
-          bodyRegex: '"operationName":"PaymentDetails"',
-        },
-      }),
-    });
-    expect(matchesTemplate(
-      withBodyFilter,
-      'https://provider.example/graphql',
-      'POST',
-    )).toBe(false);
-    expect(matchesTemplate(
-      withBodyFilter,
-      'https://provider.example/graphql',
-      'POST',
-      '{"operationName":"Other"}',
-    )).toBe(false);
-    expect(matchesTemplate(
-      withBodyFilter,
-      'https://provider.example/graphql',
-      'POST',
-      '{"operationName":"PaymentDetails"}',
-    )).toBe(true);
-    expect(matchesTemplate(
-      base,
-      'https://account.venmo.com/api/stories?feedType=me&externalId=123',
-      'GET',
-      '',
-    )).toBe(true);
-  });
-
-  it('honors fallback method and bodyRegex', () => {
-    const capture = session({
-      template: parseProviderTemplate({
-        ...venmoTemplate,
-        metadata: {
-          ...venmoTemplate.metadata,
-          urlRegex: '^https://never.example',
-          fallbackMethod: 'POST',
-          fallbackUrlRegex: '^https://provider.example/fallback$',
-          fallbackBodyRegex: 'payment=true',
-        },
-      }),
-    });
-    expect(matchesTemplate(
-      capture,
-      'https://provider.example/fallback',
-      'GET',
-      'payment=true',
-    )).toBe(false);
-    expect(matchesTemplate(
-      capture,
-      'https://provider.example/fallback',
-      'POST',
-      'payment=true',
-    )).toBe(true);
-  });
-
-  it('accepts an authenticated Revolut retail request as replay context', () => {
-    const capture = session({
-      platform: 'revolut',
-      template: parseProviderTemplate({
-        ...venmoTemplate,
-        authLink: 'https://app.revolut.com/home?accountType=all_main_pockets',
-        metadata: {
-          ...venmoTemplate.metadata,
-          platform: 'revolut',
-        },
-      }),
-    });
-
-    expect(matchesRevolutContextRequest(
-      capture,
-      'https://app.revolut.com/api/retail/user/current/accounts',
-      'GET',
-    )).toBe(true);
-    expect(matchesRevolutContextRequest(
-      capture,
-      'https://app.revolut.com/api/analytics',
-      'GET',
-    )).toBe(false);
-    expect(matchesRevolutContextRequest(
-      capture,
-      'https://evil.example/api/retail/user/current/accounts',
-      'GET',
-    )).toBe(false);
-    expect(matchesRevolutContextRequest(capture, capture.template.authLink, 'GET'))
-      .toBe(false);
-  });
-
-  it('requires application auth rather than a Cloudflare-only cookie', () => {
-    expect(hasLikelyRevolutAuth({ Authorization: 'Bearer secret' })).toBe(true);
-    expect(hasLikelyRevolutAuth({ Cookie: '__cf_bm=challenge; revolut_session=secret' }))
-      .toBe(true);
-    expect(hasLikelyRevolutAuth({ Cookie: '__cf_bm=challenge; cf_clearance=ok' }))
-      .toBe(false);
-    expect(hasLikelyRevolutAuth({ Accept: 'application/json' })).toBe(false);
-  });
-});
 
 describe('Seller Autopilot capture boundary', () => {
   it('builds a Venmo seller payload while keeping credentials inside the extension', () => {

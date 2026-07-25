@@ -13,7 +13,7 @@ import type { ProviderTemplate } from '../templates/types.js';
 
 const FORBIDDEN_HEADERS = new Set([
   'cookie', 'origin', 'referer', 'user-agent',
-  'content-length', 'host', 'connection',
+  'content-length', 'host', 'connection', 'accept-encoding',
 ]);
 
 const DNR_RULE_ID_MIN = 90_001;

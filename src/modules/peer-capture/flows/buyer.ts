@@ -1,10 +1,10 @@
 import { offscreenCall } from '../../../core/offscreen/rpc.js';
 import { openPrompt } from '../../../core/consent/prompt.js';
 import { busEvent } from '../../../core/bus/protocol.js';
-import { extractRows, parseReplayPayload } from '../capture/extract.js';
+import { extractRows } from '../capture/extract.js';
 import { buildParams, type CaptureSources } from '../capture/selectors.js';
 import { assertNoPrivateLeak } from '../capture/redact.js';
-import { replayRequest, resolveReplayRequest } from '../capture/replay.js';
+import { resolveMetadataPayload } from '../capture/metadata-engine.js';
 import {
   getSession,
   putSession,
@@ -51,29 +51,25 @@ export async function runBuyerCapture(requestId: string): Promise<void> {
 
   try {
     await putSession({ ...session, status: 'extracting' });
-    const replayTarget = resolveReplayRequest(session.captured, session.template);
-    const replay = await replayRequest(replayTarget, {
-      inPage: session.template.metadata.shouldReplayRequestInPage === true,
-      tabId: session.authTabId,
+    const payload = await resolveMetadataPayload({
+      context: session.captured,
+      template: session.template,
+      authTabId: session.authTabId,
     });
-    if (replay.status >= 400) {
-      throw new Error(`Replay failed (HTTP ${replay.status})`);
-    }
-
-    const parsed = parseReplayPayload(
-      replay.text,
-      session.template.metadata.preprocessRegex,
+    const rows = await extractRows(
+      session.template,
+      payload.parsed.text,
+      payload.parsed.json,
     );
-    const rows = await extractRows(session.template, parsed.text, parsed.json);
     if (rows.length === 0) throw new Error('No transactions found to capture');
 
     const sources: CaptureSources = {
-      responseJson: parsed.json,
-      responseText: parsed.text,
+      responseJson: payload.parsed.json,
+      responseText: payload.parsed.text,
       requestBody: session.captured.body,
       requestHeaders: session.captured.headers,
-      responseHeaders: replay.headers,
-      url: replayTarget.url,
+      responseHeaders: payload.response.headers,
+      url: payload.request.url,
     };
 
     // Build per-row params up front so the page can select by metadata and

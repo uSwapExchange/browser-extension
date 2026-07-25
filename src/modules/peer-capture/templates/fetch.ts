@@ -3,11 +3,6 @@ import { parseProviderTemplate, type ProviderTemplate } from './types.js';
 const TEMPLATE_BASE = 'https://api.zkp2p.xyz/providers';
 export const REVOLUT_ALL_POCKETS_AUTH_LINK =
   'https://app.revolut.com/home?accountType=all_main_pockets';
-export const REVOLUT_SEE_ALL_TRANSACTIONS_XPATH =
-  '//*[self::a or self::button or @role="button"]['
-  + 'contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "see all")'
-  + ' or contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "view all")'
-  + ']';
 
 export interface ResolvedTemplate {
   template: ProviderTemplate;
@@ -23,21 +18,6 @@ export function normalizePlatformTemplate(
   return {
     ...template,
     authLink: REVOLUT_ALL_POCKETS_AUTH_LINK,
-    metadata: {
-      ...template.metadata,
-      // Revolut's authenticated SPA adds request-specific auth context to the
-      // transaction-history call. A bare extension fetch gets HTTP 401 even
-      // while the user is signed in. Prompt the user to make Revolut issue the
-      // request itself, then capture/replay that genuine request exactly as
-      // Peer's reference extension expects.
-      userInput: template.metadata.userInput ?? {
-        promptText:
-          'Open Transactions using “See all,” or refresh this Transactions page if it is already open.',
-        transactionXpath: REVOLUT_SEE_ALL_TRANSACTIONS_XPATH,
-        waitForXpathMs: 20_000,
-        pollIntervalMs: 250,
-      },
-    },
   };
 }
 

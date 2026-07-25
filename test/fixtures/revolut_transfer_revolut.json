@@ -1,0 +1,79 @@
+{
+  "actionType": "transfer_revolut",
+  "authLink": "https://app.revolut.com/home",
+  "url": "https://app.revolut.com/api/retail/user/current/transactions/last?count=20",
+  "method": "GET",
+  "body": "",
+  "metadata": {
+    "shouldReplayRequestInPage": true,
+    "metadataUrl": "https://app.revolut.com/api/retail/user/current/transactions/last?count=20",
+    "metadataUrlMethod": "GET",
+    "metadataUrlBody": "",
+    "platform": "revolut",
+    "urlRegex": "https://app.revolut.com/api/retail/user/current/transactions/last\\?count=20$",
+    "method": "GET",
+    "fallbackUrlRegex": "https://app.revolut.com/api/retail/user/current/transactions/last\\S+",
+    "fallbackMethod": "GET",
+    "preprocessRegex": "",
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "$",
+      "transactionJsonPathSelectors": {
+        "recipient": "$.recipient.username",
+        "amount": "$.amount",
+        "date": "$.completedDate",
+        "paymentId": "$.id",
+        "currency": "$.currency",
+        "state": "$.state",
+        "type": "$.type"
+      }
+    },
+    "proofMetadataSelectors": [
+      {
+        "type": "jsonPath",
+        "value": "$.[{{INDEX}}].amount"
+      },
+      {
+        "type": "jsonPath",
+        "value": "$.[{{INDEX}}].currency"
+      },
+      {
+        "type": "jsonPath",
+        "value": "$.[{{INDEX}}].recipient.username"
+      },
+      {
+        "type": "jsonPath",
+        "value": "$.[{{INDEX}}].completedDate"
+      },
+      {
+        "type": "jsonPath",
+        "value": "$.[{{INDEX}}].state"
+      },
+      {
+        "type": "jsonPath",
+        "value": "$.[{{INDEX}}].id"
+      }
+    ]
+  },
+  "paramNames": [],
+  "paramSelectors": [],
+  "mobile": {
+    "includeAdditionalCookieDomains": [],
+    "additionalClientOptions": {
+      "cipherSuites": [
+        "TLS_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256"
+      ]
+    },
+    "userAgent": {
+      "android": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+      "ios": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15"
+    },
+    "useExternalAction": true,
+    "external": {
+      "actionLink": "https://revolut.me/{{RECIPIENT_ID}}",
+      "appStoreLink": "https://apps.apple.com/us/app/revolut/id370619147",
+      "playStoreLink": "https://play.google.com/store/apps/details?id=com.revolut.revolut"
+    }
+  }
+}
