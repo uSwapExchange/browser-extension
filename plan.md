@@ -6,7 +6,7 @@
    reference request filtering and response lifecycle tests.
 3. [x] Integrate the request cache with buyer metadata resolution and replay,
    preserving uSwap encryption, redaction, consent, and delivery behavior.
-4. [ ] Remove the Revolut `/api/retail/` heuristic and add a complete live-shape
+4. [x] Remove the Revolut `/api/retail/` heuristic and add a complete live-shape
    Revolut template contract test covering fallback, metadata replay, extraction,
    and selected proof index.
 5. [ ] Reconcile Chrome/Firefox listener differences, run the full validation

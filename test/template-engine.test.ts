@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import venmoTemplate from './fixtures/venmo_transfer_venmo.json';
 import cashappTemplate from './fixtures/cashapp_transfer_cashapp.json';
+import revolutTemplate from './fixtures/revolut_transfer_revolut.json';
 import { parseProviderTemplate } from '../src/modules/peer-capture/templates/types.js';
 import {
   normalizePlatformTemplate,
   REVOLUT_ALL_POCKETS_AUTH_LINK,
-  REVOLUT_SEE_ALL_TRANSACTIONS_XPATH,
 } from '../src/modules/peer-capture/templates/fetch.js';
 import { extractJsonRows, jsonPathWithIndex } from '../src/modules/peer-capture/capture/extract.js';
 import { buildParams } from '../src/modules/peer-capture/capture/selectors.js';
@@ -80,29 +80,19 @@ describe('provider template parsing', () => {
     });
     const normalized = normalizePlatformTemplate('revolut', template);
     expect(normalized.authLink).toBe(REVOLUT_ALL_POCKETS_AUTH_LINK);
-    expect(normalized.metadata.userInput).toMatchObject({
-      transactionXpath: REVOLUT_SEE_ALL_TRANSACTIONS_XPATH,
-      waitForXpathMs: 20_000,
-    });
+    expect(normalized.metadata).toEqual(template.metadata);
     expect(template.metadata.shouldReplayRequestInPage).toBe(true);
   });
 
-  it('preserves an upstream Revolut transaction guide when one is provided', () => {
-    const template = parseProviderTemplate({
-      ...venmoTemplate,
-      metadata: {
-        ...venmoTemplate.metadata,
-        platform: 'revolut',
-        userInput: {
-          promptText: 'Use the provider guide',
-          transactionXpath: '//button[@data-provider-guide]',
-        },
-      },
-      authLink: 'https://app.revolut.com/home',
-    });
-
-    expect(normalizePlatformTemplate('revolut', template).metadata.userInput)
-      .toEqual(template.metadata.userInput);
+  it('preserves the complete live Revolut template outside the auth-link wrapper', () => {
+    const template = parseProviderTemplate(revolutTemplate);
+    const normalized = normalizePlatformTemplate('revolut', template);
+    expect(normalized.authLink).toBe(REVOLUT_ALL_POCKETS_AUTH_LINK);
+    expect(normalized.metadata).toEqual(template.metadata);
+    expect(normalized.paramNames).toEqual([]);
+    expect(normalized.paramSelectors).toEqual([]);
+    expect(normalized.metadata.proofMetadataSelectors).toHaveLength(6);
+    expect(normalized.mobile).toEqual(revolutTemplate.mobile);
   });
 });
 
