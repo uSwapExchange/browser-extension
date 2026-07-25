@@ -8,11 +8,7 @@ import type { BusEvent, ModuleId } from '../bus/protocol.js';
  */
 
 export interface ModuleContext {
-  /**
-   * Push an event to the relay port of a specific connection (the frame that
-   * called window.peer), keyed by connKeyForSender. Returns false if no live
-   * port — e.g. the originating frame navigated away.
-   */
+  /** Push an event to the exact frame connection that initiated the request. */
   pushToConnection(connectionKey: string, event: BusEvent): boolean;
 }
 

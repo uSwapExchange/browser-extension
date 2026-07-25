@@ -1,14 +1,7 @@
 /**
- * The @zkp2p/sdk cryptography + DOM/XPath extraction handlers, factored out of
- * the Chrome offscreen document so both targets can share them:
- *   - Chrome: the MV3 service worker can't touch the DOM/WASM, so these run in
- *     an offscreen document (src/offscreen/offscreen.ts wires the RPC listener).
- *   - Firefox: the MV3 background is an event page that CAN use the DOM +
- *     WebCrypto directly, so `offscreenCall` invokes `dispatchOffscreen` here
- *     in-process — no offscreen document, no RPC round-trip.
- *
- * Plaintext session material is held only transiently and never persisted —
- * only ciphertext / extracted fields are returned.
+ * Shared @zkp2p cryptography and DOM/XPath handlers. Chrome invokes these from
+ * its offscreen document; Firefox invokes them inside its background event
+ * page, where DOM and WebCrypto are available.
  */
 import {
   apiCreateSellerCredentialBundle,
@@ -23,7 +16,7 @@ const attestationRuntime: SellerCredentialAttestationRuntime = {
   getRandomValues: (array) => globalThis.crypto.getRandomValues(array),
 };
 
-export async function handleEncryptBuyerTee(
+async function handleEncryptBuyerTee(
   payload: Extract<OffscreenRequest, { type: 'encrypt-buyer-tee' }>['payload'],
 ): Promise<{ encryptedSessionMaterial: unknown }> {
   const encrypted = await createEncryptedBuyerTeeSessionMaterial({
@@ -35,7 +28,7 @@ export async function handleEncryptBuyerTee(
   return { encryptedSessionMaterial: encrypted };
 }
 
-export async function handleCreateSellerBundle(
+async function handleCreateSellerBundle(
   payload: Extract<OffscreenRequest, { type: 'create-seller-bundle' }>['payload'],
 ): Promise<{ credentialBundle: unknown }> {
   const response = await apiCreateSellerCredentialBundle(
@@ -48,34 +41,67 @@ export async function handleCreateSellerBundle(
   return { credentialBundle: (response as { responseObject?: unknown }).responseObject ?? response };
 }
 
-export function handleXPathExtract(
+function handleXPathExtract(
   payload: Extract<OffscreenRequest, { type: 'xpath-extract' }>['payload'],
 ): { rows: Array<Record<string, unknown>> } {
   const doc = new DOMParser().parseFromString(payload.html, 'text/html');
-  const evaluateNodes = (context: Node, expr: string): Node[] => {
-    const result = doc.evaluate(expr, context, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+  const evaluateNodes = (context: Node, expression: string): Node[] => {
+    const result = doc.evaluate(expression, context, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
     const nodes: Node[] = [];
-    for (let i = 0; i < result.snapshotLength; i += 1) {
-      const node = result.snapshotItem(i);
+    for (let index = 0; index < result.snapshotLength; index += 1) {
+      const node = result.snapshotItem(index);
       if (node) nodes.push(node);
     }
     return nodes;
   };
-  const rows = evaluateNodes(doc, payload.listSelector).map((node, originalIndex) => {
-    const row: Record<string, unknown> = { originalIndex };
-    for (const [field, expr] of Object.entries(payload.fieldSelectors)) {
-      const matches = evaluateNodes(node, expr);
-      row[field] = matches[0]?.textContent ?? null;
+
+  const evaluateValue = (context: Node, expression: string): string | null => {
+    const result = doc.evaluate(expression, context, null, XPathResult.ANY_TYPE, null);
+    switch (result.resultType) {
+      case XPathResult.STRING_TYPE:
+        return result.stringValue.trim() || null;
+      case XPathResult.NUMBER_TYPE:
+        return Number.isFinite(result.numberValue) ? String(result.numberValue) : null;
+      case XPathResult.BOOLEAN_TYPE:
+        return String(result.booleanValue);
+      default: {
+        const node = result.iterateNext();
+        return node?.textContent?.trim() || null;
+      }
     }
+  };
+
+  const contexts = payload.listSelector ? evaluateNodes(doc, payload.listSelector) : [doc];
+  const rows = contexts.map((node, originalIndex) => {
+    const row: Record<string, unknown> = { originalIndex };
+    for (const [field, expression] of Object.entries(payload.fieldSelectors)) {
+      row[field] = evaluateValue(node, expression);
+    }
+    row.hidden = Object.entries(row)
+      .filter(([field]) => field !== 'originalIndex' && field !== 'hidden')
+      .some(([, value]) => value === null || value === undefined || value === '');
     return row;
   });
   return { rows };
 }
 
-/**
- * Dispatch an offscreen request to its handler. Used by the Chrome offscreen
- * document's message listener AND directly by Firefox's background event page.
- */
+function handleXPathValue(
+  payload: Extract<OffscreenRequest, { type: 'xpath-value' }>['payload'],
+): { value: string | null } {
+  const doc = new DOMParser().parseFromString(payload.html, 'text/html');
+  const result = doc.evaluate(payload.expression, doc, null, XPathResult.ANY_TYPE, null);
+  switch (result.resultType) {
+    case XPathResult.STRING_TYPE:
+      return { value: result.stringValue.trim() || null };
+    case XPathResult.NUMBER_TYPE:
+      return { value: Number.isFinite(result.numberValue) ? String(result.numberValue) : null };
+    case XPathResult.BOOLEAN_TYPE:
+      return { value: String(result.booleanValue) };
+    default:
+      return { value: result.iterateNext()?.textContent?.trim() || null };
+  }
+}
+
 export async function dispatchOffscreen(request: OffscreenRequest): Promise<unknown> {
   switch (request.type) {
     case 'encrypt-buyer-tee':
@@ -84,6 +110,8 @@ export async function dispatchOffscreen(request: OffscreenRequest): Promise<unkn
       return handleCreateSellerBundle(request.payload);
     case 'xpath-extract':
       return handleXPathExtract(request.payload);
+    case 'xpath-value':
+      return handleXPathValue(request.payload);
     default:
       throw new Error('Unknown offscreen request');
   }

@@ -2,8 +2,16 @@ import { describe, expect, it } from 'bun:test';
 import venmoTemplate from './fixtures/venmo_transfer_venmo.json';
 import cashappTemplate from './fixtures/cashapp_transfer_cashapp.json';
 import { parseProviderTemplate } from '../src/modules/peer-capture/templates/types.js';
+import {
+  normalizePlatformTemplate,
+  REVOLUT_ALL_POCKETS_AUTH_LINK,
+} from '../src/modules/peer-capture/templates/fetch.js';
 import { extractJsonRows, jsonPathWithIndex } from '../src/modules/peer-capture/capture/extract.js';
 import { buildParams } from '../src/modules/peer-capture/capture/selectors.js';
+import {
+  parseReplayPayload,
+} from '../src/modules/peer-capture/capture/extract.js';
+import { resolveReplayRequest } from '../src/modules/peer-capture/capture/replay.js';
 import { assertNoPrivateLeak, PrivateMaterialLeak } from '../src/modules/peer-capture/capture/redact.js';
 
 const VENMO_RESPONSE = {
@@ -25,6 +33,21 @@ const VENMO_RESPONSE = {
   ],
 };
 
+function captureSources(
+  responseJson: unknown,
+  overrides: Partial<Parameters<typeof buildParams>[2]> = {},
+): Parameters<typeof buildParams>[2] {
+  return {
+    responseJson,
+    responseText: JSON.stringify(responseJson),
+    requestBody: '',
+    requestHeaders: {},
+    responseHeaders: {},
+    url: 'https://account.venmo.com/api/stories',
+    ...overrides,
+  };
+}
+
 describe('provider template parsing', () => {
   it('parses the real venmo template', () => {
     const template = parseProviderTemplate(venmoTemplate);
@@ -41,6 +64,22 @@ describe('provider template parsing', () => {
 
   it('rejects a template missing required fields', () => {
     expect(() => parseProviderTemplate({ authLink: 'not-a-url' })).toThrow();
+  });
+
+  it('opens Revolut on the all-currency account view', () => {
+    const template = parseProviderTemplate({
+      ...venmoTemplate,
+      platform: 'revolut',
+      metadata: {
+        ...venmoTemplate.metadata,
+        platform: 'revolut',
+        shouldReplayRequestInPage: true,
+      },
+      authLink: 'https://app.revolut.com/home',
+    });
+    expect(normalizePlatformTemplate('revolut', template).authLink)
+      .toBe(REVOLUT_ALL_POCKETS_AUTH_LINK);
+    expect(template.metadata.shouldReplayRequestInPage).toBe(true);
   });
 });
 
@@ -68,30 +107,153 @@ describe('jsonPathWithIndex', () => {
 });
 
 describe('buildParams', () => {
-  it('builds SENDER_ID from the response and includes index', () => {
+  it('builds public params without adding a platform-specific index', async () => {
     const template = parseProviderTemplate(venmoTemplate);
-    const result = buildParams(template, 1, {
-      responseJson: VENMO_RESPONSE,
-      requestBody: '',
+    const result = await buildParams(template, 1, captureSources(VENMO_RESPONSE, {
       url: 'https://account.venmo.com/api/stories?feedType=me&externalId=sender-123',
-    });
-    expect(result.params).toMatchObject({ SENDER_ID: 'sender-123', index: 1 });
+    }));
+    expect(result.params).toEqual({ SENDER_ID: 'sender-123' });
     expect(result.privateParamNames).toEqual([]);
   });
 
-  it('flags requestBody-sourced params as private', () => {
+  it('normalizes numeric provider identifiers to strings', async () => {
+    const template = parseProviderTemplate({
+      ...venmoTemplate,
+      actionType: 'transfer_wise',
+      metadata: {
+        ...venmoTemplate.metadata,
+        platform: 'wise',
+        transactionsExtraction: {
+          transactionJsonPathListSelector: '$',
+          transactionJsonPathSelectors: {
+            amount: '$.primaryAmount',
+            paymentId: '$.resource.id',
+            recipient: '$.title',
+            date: '$.visibleOn',
+            currency: '$.currency',
+          },
+        },
+      },
+      paramNames: ['TRANSACTION_ID', 'PROFILE_ID'],
+      paramSelectors: [
+        { type: 'jsonPath', value: '$.[{{INDEX}}].resource.id' },
+        { type: 'jsonPath', value: '$.[{{INDEX}}].ownedByProfile' },
+      ],
+    });
+    const response = [{
+        resource: { id: 2267000001 },
+        ownedByProfile: 82590001,
+      }];
+    const result = await buildParams(template, 0, captureSources(response, {
+      url: 'https://wise.com/gateway/v1/profiles/82590001/activities/list',
+    }));
+
+    expect(result.params).toEqual({
+      TRANSACTION_ID: '2267000001',
+      PROFILE_ID: '82590001',
+    });
+  });
+
+  it('keeps requestBody-sourced params private and out of the page payload', async () => {
     const template = parseProviderTemplate({
       ...venmoTemplate,
       paramNames: ['SECRET'],
       paramSelectors: [{ type: 'regex', value: 'token=(\\w+)', source: 'requestBody' }],
     });
-    const result = buildParams(template, 0, {
-      responseJson: VENMO_RESPONSE,
+    const result = await buildParams(template, 0, captureSources(VENMO_RESPONSE, {
       requestBody: 'token=supersecret&x=1',
       url: 'https://account.venmo.com/api/stories',
-    });
-    expect(result.params.SECRET).toBe('supersecret');
+    }));
+    expect(result.params.SECRET).toBeUndefined();
     expect(result.privateParamNames).toEqual(['SECRET']);
+    expect(result.privateValues).toEqual(['supersecret']);
+  });
+
+  it('extracts params from request and response headers', async () => {
+    const template = parseProviderTemplate({
+      ...venmoTemplate,
+      paramNames: ['REQUEST_ID', 'RESPONSE_ID'],
+      paramSelectors: [
+        { type: 'jsonPath', value: '$.x-request-id', source: 'requestHeaders' },
+        { type: 'regex', value: '"x-response-id":"([^"]+)"', source: 'responseHeaders' },
+      ],
+    });
+    const result = await buildParams(template, 0, captureSources(VENMO_RESPONSE, {
+      requestHeaders: { 'x-request-id': 'request-123' },
+      responseHeaders: { 'x-response-id': 'response-456' },
+    }));
+    expect(result.params).toEqual({
+      REQUEST_ID: 'request-123',
+      RESPONSE_ID: 'response-456',
+    });
+  });
+});
+
+describe('replay template semantics', () => {
+  it('honors metadataUrl method/body and keeps it on the authenticated host', () => {
+    const template = parseProviderTemplate({
+      ...venmoTemplate,
+      metadata: {
+        ...venmoTemplate.metadata,
+        metadataUrl: 'https://account.venmo.com/api/metadata',
+        metadataUrlMethod: 'POST',
+        metadataUrlBody: '{"limit":10}',
+      },
+    });
+    expect(resolveReplayRequest({
+      url: 'https://account.venmo.com/api/context',
+      method: 'GET',
+      headers: { Cookie: 'secret' },
+      body: '',
+    }, template)).toEqual({
+      url: 'https://account.venmo.com/api/metadata',
+      method: 'POST',
+      headers: { Cookie: 'secret' },
+      body: '{"limit":10}',
+    });
+  });
+
+  it('rejects cross-host metadata replay', () => {
+    const template = parseProviderTemplate({
+      ...venmoTemplate,
+      metadata: {
+        ...venmoTemplate.metadata,
+        metadataUrl: 'https://evil.example/steal',
+      },
+    });
+    expect(() => resolveReplayRequest({
+      url: 'https://account.venmo.com/api/context',
+      method: 'GET',
+      headers: {},
+      body: '',
+    }, template)).toThrow('Unsafe metadataUrl');
+  });
+
+  it('preprocesses HTML-wrapped JSON and supports root-object extraction', () => {
+    const parsed = parseReplayPayload(
+      '<html><pre>{"data":{"amount":"60.00","id":"tx-1"}}</pre></html>',
+      '<pre[^>]*>([\\s\\S]*?)<\\/pre>',
+    );
+    expect(parsed.json).toEqual({ data: { amount: '60.00', id: 'tx-1' } });
+
+    const template = parseProviderTemplate({
+      ...venmoTemplate,
+      metadata: {
+        ...venmoTemplate.metadata,
+        transactionsExtraction: {
+          transactionJsonPathSelectors: {
+            amount: '$.data.amount',
+            paymentId: '$.data.id',
+          },
+        },
+      },
+    });
+    expect(extractJsonRows(template, parsed.json)).toEqual([{
+      originalIndex: 0,
+      amount: '60.00',
+      paymentId: 'tx-1',
+      hidden: false,
+    }]);
   });
 });
 

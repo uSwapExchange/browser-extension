@@ -10,13 +10,11 @@ import { resolveHandler, type ModuleContext } from '../modules/registry.js';
 
 /**
  * Background side of the bus: dispatches BusRequests to module handlers and
- * tracks the long-lived relay Port per CONNECTION (documentId) so modules can
- * push events (e.g. metadata messages) back to exactly the frame that called
- * window.peer. Keyed by connection — not tab — so it works from the Firefox
- * sidebar / side panel, which isn't a tab.
+ * tracks the long-lived relay Port per document connection so modules can push
+ * events back to the exact frame, including a Firefox sidebar.
  *
- * Everything here must be wired synchronously at top level so webRequest/runtime
- * events wake the worker / event page.
+ * Everything here must be wired synchronously at SW top level so webRequest/
+ * runtime events wake the worker.
  */
 
 const connPorts = new Map<string, chrome.runtime.Port>();

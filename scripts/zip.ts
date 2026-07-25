@@ -9,7 +9,9 @@ await $`rm -f ${out}`;
 
 const hasZip = await $`command -v zip`.quiet().then(() => true).catch(() => false);
 if (hasZip) {
-  await $`zip -r ${out} .`.cwd('dist');
+  // build:all writes Firefox beside the Chrome build. Never ship the nested
+  // Firefox manifest/assets inside the Chrome Web Store archive.
+  await $`zip -r ${out} . -x ${'firefox/*'} ${'firefox-artifacts/*'}`.cwd('dist');
   await $`mv dist/${out} ${out}`;
 } else {
   await $`python3 -c ${`
@@ -19,7 +21,12 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
     for root, _, files in os.walk("dist"):
         for f in files:
             full = os.path.join(root, f)
-            z.write(full, os.path.relpath(full, "dist"))
+            rel = os.path.relpath(full, "dist")
+            if rel == "firefox" or rel.startswith("firefox" + os.sep):
+                continue
+            if rel == "firefox-artifacts" or rel.startswith("firefox-artifacts" + os.sep):
+                continue
+            z.write(full, rel)
 `}`;
 }
 console.log(`wrote ${out}`);

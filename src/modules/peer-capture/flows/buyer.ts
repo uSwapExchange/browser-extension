@@ -1,10 +1,10 @@
 import { offscreenCall } from '../../../core/offscreen/rpc.js';
 import { openPrompt } from '../../../core/consent/prompt.js';
 import { busEvent } from '../../../core/bus/protocol.js';
-import { extractJsonRows } from '../capture/extract.js';
+import { extractRows, parseReplayPayload } from '../capture/extract.js';
 import { buildParams, type CaptureSources } from '../capture/selectors.js';
 import { assertNoPrivateLeak } from '../capture/redact.js';
-import { replayRequest } from '../capture/replay.js';
+import { replayRequest, resolveReplayRequest } from '../capture/replay.js';
 import {
   getSession,
   putSession,
@@ -36,24 +36,44 @@ function deliverError(session: CaptureSession, error: string): void {
   });
 }
 
+async function finishProviderTab(session: CaptureSession): Promise<void> {
+  if (session.sourceTabId != null) {
+    try { await chrome.tabs.update(session.sourceTabId, { active: true }); } catch { /* source closed */ }
+  }
+  if (!session.template.metadata.shouldSkipCloseTab && session.authTabId != null) {
+    try { await chrome.tabs.remove(session.authTabId); } catch { /* already closed */ }
+  }
+}
+
 export async function runBuyerCapture(requestId: string): Promise<void> {
   const session = await getSession(requestId);
   if (!session || !session.captured) return;
 
   try {
     await putSession({ ...session, status: 'extracting' });
-    const replay = await replayRequest(session.captured);
-    if (replay.status >= 400 || replay.json == null) {
+    const replayTarget = resolveReplayRequest(session.captured, session.template);
+    const replay = await replayRequest(replayTarget, {
+      inPage: session.template.metadata.shouldReplayRequestInPage === true,
+      tabId: session.authTabId,
+    });
+    if (replay.status >= 400) {
       throw new Error(`Replay failed (HTTP ${replay.status})`);
     }
 
-    const rows = extractJsonRows(session.template, replay.json);
+    const parsed = parseReplayPayload(
+      replay.text,
+      session.template.metadata.preprocessRegex,
+    );
+    const rows = await extractRows(session.template, parsed.text, parsed.json);
     if (rows.length === 0) throw new Error('No transactions found to capture');
 
     const sources: CaptureSources = {
-      responseJson: replay.json,
+      responseJson: parsed.json,
+      responseText: parsed.text,
       requestBody: session.captured.body,
-      url: session.captured.url,
+      requestHeaders: session.captured.headers,
+      responseHeaders: replay.headers,
+      url: replayTarget.url,
     };
 
     // Build per-row params up front so the page can select by metadata and
@@ -61,13 +81,15 @@ export async function runBuyerCapture(requestId: string): Promise<void> {
     const privateValues: unknown[] = [];
     const paramsByIndex = new Map<number, Record<string, unknown>>();
     for (const row of rows) {
-      const built = buildParams(session.template, row.originalIndex, sources);
+      const built = await buildParams(session.template, row.originalIndex, sources);
       paramsByIndex.set(row.originalIndex, built.params);
-      for (const name of built.privateParamNames) privateValues.push(built.params[name]);
+      privateValues.push(...built.privateValues);
     }
     // Secret-header values are private too.
     for (const name of session.template.secretHeaders ?? []) {
-      const value = session.captured.headers[name];
+      const matched = Object.keys(session.captured.headers)
+        .find((header) => header.toLowerCase() === name.toLowerCase());
+      const value = matched ? session.captured.headers[matched] : undefined;
       if (value) privateValues.push(value);
     }
     assertNoPrivateLeak(rows, privateValues);
@@ -93,17 +115,13 @@ export async function runBuyerCapture(requestId: string): Promise<void> {
     }
 
     // Encrypt the captured session material in the offscreen document.
-    const sessionMaterial: Record<string, string> = {
-      ...session.captured.headers,
-      url: session.captured.url,
-      method: session.captured.method,
-      body: session.captured.body,
-    };
+    const sessionMaterial: Record<string, string> = { ...session.captured.headers };
+    if (session.captured.body) sessionMaterial.body = session.captured.body;
     const { encryptedSessionMaterial } = await offscreenCall<{ encryptedSessionMaterial: string }>(
       'encrypt-buyer-tee',
       {
         platform: session.platform,
-        actionType: session.actionType,
+        actionType: session.attestationActionType,
         attestationServiceUrl: session.attestationServiceUrl,
         sessionMaterial,
       },
@@ -120,12 +138,13 @@ export async function runBuyerCapture(requestId: string): Promise<void> {
 
     deliver(session, {
       requestId: session.requestId,
-      platform: session.platform,
+      platform: session.template.metadata.platform,
       metadata,
       expiresAt: session.expiresAt,
       buyerTeeCapture: { encryptedSessionMaterial, params: firstParams },
     });
     await wipeSession(requestId);
+    await finishProviderTab(session);
   } catch (error) {
     await wipeSession(requestId);
     deliverError(session, error instanceof Error ? error.message : String(error));

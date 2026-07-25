@@ -5,7 +5,7 @@ import type { PeerCaptureMode } from '../api-contract.js';
 /**
  * Per-capture session state, memory-backed in chrome.storage.session. Holds
  * transient material only and is wiped on completion/expiry. One active
- * session per origin tab.
+ * session per originating document connection.
  */
 
 export type CaptureStatus =
@@ -25,15 +25,16 @@ export interface CapturedRequest {
 
 export interface CaptureSession {
   requestId: string;
-  /** Routing key of the frame that called authenticate (connKeyForSender). */
   connectionKey: string;
   origin: string;
   platform: string;
   actionType: string;
+  attestationActionType: string;
   captureMode: PeerCaptureMode;
   attestationServiceUrl: string;
   template: ProviderTemplate;
   inline: boolean;
+  sourceTabId: number | null;
   authTabId: number | null;
   status: CaptureStatus;
   captured: CapturedRequest | null;
@@ -61,6 +62,11 @@ export async function listSessions(): Promise<CaptureSession[]> {
 export async function findSessionByAuthTab(tabId: number): Promise<CaptureSession | null> {
   const sessions = await listSessions();
   return sessions.find((s) => s.authTabId === tabId && s.status === 'awaiting_request') ?? null;
+}
+
+export async function findAnySessionByAuthTab(tabId: number): Promise<CaptureSession | null> {
+  const sessions = await listSessions();
+  return sessions.find((s) => s.authTabId === tabId) ?? null;
 }
 
 export async function wipeSession(requestId: string): Promise<void> {
