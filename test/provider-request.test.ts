@@ -8,6 +8,7 @@ import {
   ProviderRequestCache,
   selectCompletedProviderContext,
   selectProviderContext,
+  sessionRequestBody,
   type ProviderRequestRecord,
 } from '../src/modules/peer-capture/capture/provider-request.js';
 import { parseProviderTemplate } from '../src/modules/peer-capture/templates/types.js';
@@ -78,6 +79,16 @@ describe('ProviderRequestCache', () => {
 });
 
 describe('provider request matching', () => {
+  it('encodes captured form data as the browser request body for TEE replay', () => {
+    expect(sessionRequestBody(request({
+      requestBody: undefined,
+      formData: {
+        account: ['primary'],
+        scope: ['one', 'two'],
+      },
+    }))).toBe('account=primary&scope=one&scope=two');
+  });
+
   it('requires method, URL, and configured request body', () => {
     const candidate = request({
       url: 'https://provider.example/fallback',

@@ -12,8 +12,8 @@ import {
   matchesConfiguredRequest,
   matchesRequestCriteria,
   ProviderRequestCache,
-  requestBodyText,
   selectCompletedProviderContext,
+  sessionRequestBody,
   type ProviderRequestRecord,
 } from './provider-request.js';
 
@@ -212,7 +212,7 @@ const onResponseStartedListener = (
       url: context.url,
       method: context.method,
       headers: context.requestHeaders ?? {},
-      body: requestBodyText(context),
+      body: sessionRequestBody(context),
       responseHeaders: context.responseHeaders ?? {},
       statusCode: context.statusCode ?? details.statusCode,
       timestamp: context.timestamp ?? Date.now(),

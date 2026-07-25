@@ -69,6 +69,17 @@ export function requestBodyText(request: ProviderRequestRecord): string {
   return request.formData ? JSON.stringify(request.formData) : '';
 }
 
+/** Body representation placed into encrypted TEE session material. */
+export function sessionRequestBody(request: ProviderRequestRecord): string {
+  if (request.requestBody !== undefined) return request.requestBody;
+  if (!request.formData) return '';
+  const form = new URLSearchParams();
+  for (const [key, values] of Object.entries(request.formData)) {
+    for (const value of values) form.append(key, value);
+  }
+  return form.toString();
+}
+
 export function matchesRequestCriteria(
   request: ProviderRequestRecord,
   method: string | undefined,

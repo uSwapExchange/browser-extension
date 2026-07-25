@@ -12,7 +12,11 @@ import {
 } from './api-contract.js';
 import { resolveTemplate } from './templates/fetch.js';
 import { hostsForPlatform } from './templates/platforms.js';
-import { registerInterceptor, setCaptureCompleteHandler } from './capture/interceptor.js';
+import {
+  clearCaptureRequestCache,
+  registerInterceptor,
+  setCaptureCompleteHandler,
+} from './capture/interceptor.js';
 import {
   putSession,
   wipeSession,
@@ -89,6 +93,7 @@ async function startAuthenticate(params: PeerAuthenticateParams, sender: chrome.
   const superseded = (await listSessions())
     .filter((session) => session.connectionKey === connectionKey);
   await Promise.all(superseded.map(async (session) => {
+    clearCaptureRequestCache(session.requestId);
     await wipeSession(session.requestId);
     if (session.authTabId != null) {
       try { await chrome.tabs.remove(session.authTabId); } catch { /* already closed */ }
@@ -124,6 +129,7 @@ async function startAuthenticate(params: PeerAuthenticateParams, sender: chrome.
     await chrome.tabs.update(authTab.id, { url: template.authLink });
     await chrome.alarms.create(EXPIRY_ALARM, { periodInMinutes: 1 });
   } catch (error) {
+    clearCaptureRequestCache(session.requestId);
     await wipeSession(session.requestId);
     try { await chrome.tabs.remove(authTab.id); } catch { /* already closed */ }
     throw error;
@@ -144,6 +150,7 @@ async function sweepExpired(): Promise<void> {
   const now = Date.now();
   for (const session of await listSessions()) {
     if (session.expiresAt <= now) {
+      clearCaptureRequestCache(session.requestId);
       await wipeSession(session.requestId);
       deliverMetadata(session, {
         requestId: session.requestId,
@@ -194,6 +201,7 @@ export const peerCaptureModule: ExtensionModule = {
       void (async () => {
         const session = await findAnySessionByAuthTab(tabId);
         if (!session) return;
+        clearCaptureRequestCache(session.requestId);
         await wipeSession(session.requestId);
         deliverMetadata(session, {
           requestId: session.requestId,

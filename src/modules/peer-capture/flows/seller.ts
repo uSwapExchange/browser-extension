@@ -6,7 +6,7 @@ import {
   wipeSession,
   type CaptureSession,
 } from '../capture/session.js';
-import { replayRequest, resolveReplayRequest } from '../capture/replay.js';
+import { resolveMetadataPayload } from '../capture/metadata-engine.js';
 import type { PeerMetadataMessage } from '../api-contract.js';
 
 type DeliverFn = (session: CaptureSession, message: PeerMetadataMessage) => void;
@@ -170,15 +170,15 @@ export async function runSellerCapture(requestId: string): Promise<void> {
 
   try {
     await putSession({ ...session, status: 'extracting' });
-    const replayTarget = resolveReplayRequest(session.captured, session.template);
-    const replay = await replayRequest(replayTarget, {
-      inPage: session.template.metadata.shouldReplayRequestInPage === true,
-      tabId: session.authTabId,
+    const metadata = await resolveMetadataPayload({
+      context: session.captured,
+      template: session.template,
+      authTabId: session.authTabId,
     });
-    if (replay.status >= 400 || replay.json == null) {
-      throw new Error(`Replay failed (HTTP ${replay.status})`);
+    if (metadata.parsed.json == null) {
+      throw new Error('Provider response was not valid JSON');
     }
-    const payload = prepareSellerPayload(session, replay.json);
+    const payload = prepareSellerPayload(session, metadata.parsed.json);
 
     if (session.inline) {
       await putSession({ ...session, status: 'awaiting_approval' });
