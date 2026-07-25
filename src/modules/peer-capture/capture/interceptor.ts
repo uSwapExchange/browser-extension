@@ -10,6 +10,7 @@ import {
 import {
   isRelevantProviderRequest,
   matchesConfiguredRequest,
+  matchesTemplateOrigin,
   ProviderRequestCache,
   selectCompletedProviderContext,
   sessionRequestBody,
@@ -20,13 +21,16 @@ import {
  * Peer's reference capture lifecycle:
  *
  * - join body + sent headers + response headers by browser requestId;
- * - accept only configured requests from the active provider tab;
+ * - prefer configured primary/fallback requests from the active provider tab;
  * - wait for a successful 2xx onResponseStarted event;
  * - select primary context before fallback context;
  * - only then hand the context to the metadata/replay flow.
  *
- * Response bodies remain unreadable to MV3 webRequest. The buyer/seller flows
- * replay the selected request after this successful-response gate.
+ * Response bodies remain unreadable to MV3 webRequest. For templates that ask
+ * for in-page metadata replay, other successful same-origin requests may lend
+ * authenticated context to prime the exact configured URL. They are never used
+ * as proof data. The buyer/seller flows still consume only a configured
+ * primary/fallback request after its successful-response gate.
  */
 
 const requestCache = new ProviderRequestCache();
@@ -34,6 +38,15 @@ const requestCache = new ProviderRequestCache();
 let onCaptureComplete: ((session: CaptureSession) => void) | null = null;
 export function setCaptureCompleteHandler(handler: (session: CaptureSession) => void): void {
   onCaptureComplete = handler;
+}
+
+let onProviderActivity:
+  | ((session: CaptureSession, context: CapturedRequest) => Promise<void>)
+  | null = null;
+export function setProviderActivityHandler(
+  handler: (session: CaptureSession, context: CapturedRequest) => Promise<void>,
+): void {
+  onProviderActivity = handler;
 }
 
 export function clearCaptureRequestCache(sessionRequestId: string): void {
@@ -105,6 +118,13 @@ function relevant(details: {
   });
 }
 
+function inSessionScope(session: CaptureSession, url: string): boolean {
+  return (
+    matchesConfiguredRequest(session.template, url)
+    || matchesTemplateOrigin(session.template, url)
+  );
+}
+
 // Chrome may dispatch successive lifecycle events faster than storage-backed
 // session reads resolve. Peer's reference engine serializes them with a mutex;
 // this promise queue provides the same ordering without another dependency.
@@ -123,7 +143,7 @@ const onBeforeRequestListener = (
   if (details.tabId < 0 || !relevant(details)) return undefined;
   enqueue(async () => {
     const session = await findSessionByAuthTab(details.tabId);
-    if (!session || !matchesConfiguredRequest(session.template, details.url)) return;
+    if (!session || !inSessionScope(session, details.url)) return;
     requestCache.merge(session.requestId, details.requestId, {
       ...baseRequestPatch(details),
       ...requestBodyPatch(details.requestBody),
@@ -138,7 +158,7 @@ const onSendHeadersListener = (
   if (details.tabId < 0 || !relevant(details)) return;
   enqueue(async () => {
     const session = await findSessionByAuthTab(details.tabId);
-    if (!session || !matchesConfiguredRequest(session.template, details.url)) return;
+    if (!session || !inSessionScope(session, details.url)) return;
     requestCache.merge(session.requestId, details.requestId, {
       ...baseRequestPatch(details),
       requestHeaders: headersToRecord(details.requestHeaders),
@@ -153,19 +173,37 @@ const onResponseStartedListener = (
 
   enqueue(async () => {
     const session = await findSessionByAuthTab(details.tabId);
-    if (!session || !matchesConfiguredRequest(session.template, details.url)) return;
+    if (!session || !inSessionScope(session, details.url)) return;
 
-    requestCache.merge(session.requestId, details.requestId, {
+    const completed = requestCache.merge(session.requestId, details.requestId, {
       ...baseRequestPatch(details),
       statusCode: details.statusCode,
       responseHeaders: headersToRecord(details.responseHeaders),
       timestamp: Date.now(),
     });
     if (details.statusCode < 200 || details.statusCode >= 300) {
-      console.warn('[peer-capture] configured provider request was not successful', {
-        platform: session.platform,
-        statusCode: details.statusCode,
-      });
+      if (matchesConfiguredRequest(session.template, details.url)) {
+        console.warn('[peer-capture] configured provider request was not successful', {
+          platform: session.platform,
+          statusCode: details.statusCode,
+        });
+      }
+      return;
+    }
+
+    const configured = matchesConfiguredRequest(session.template, details.url);
+    if (!configured) {
+      if (onProviderActivity) {
+        await onProviderActivity(session, {
+          url: completed.url,
+          method: completed.method,
+          headers: completed.requestHeaders ?? {},
+          body: sessionRequestBody(completed),
+          responseHeaders: completed.responseHeaders ?? {},
+          statusCode: completed.statusCode,
+          timestamp: completed.timestamp,
+        });
+      }
       return;
     }
 

@@ -154,6 +154,41 @@ export function matchesConfiguredRequest(
     .some((pattern) => new RegExp(pattern).test(url));
 }
 
+/**
+ * A provider page can stop issuing the exact request named by an older hosted
+ * template while still making other authenticated API requests on the same
+ * origin. Those requests are valid authentication context for an in-page
+ * metadata replay, but never become the proof target themselves.
+ */
+export function matchesTemplateOrigin(
+  template: ProviderTemplate,
+  rawUrl: string,
+): boolean {
+  try {
+    const requestUrl = new URL(rawUrl);
+    const configuredUrls = [
+      template.metadata.metadataUrl,
+      template.url,
+      template.authLink,
+    ].filter((value): value is string => Boolean(value && !value.includes('{{')));
+    return configuredUrls.some((value) => {
+      const configured = new URL(value);
+      return requestUrl.protocol === 'https:' && requestUrl.origin === configured.origin;
+    });
+  } catch {
+    return false;
+  }
+}
+
+export function canPrimeMetadataRequest(template: ProviderTemplate): boolean {
+  const target = template.metadata.metadataUrl?.trim();
+  return (
+    template.metadata.shouldReplayRequestInPage === true
+    && Boolean(target)
+    && !target?.includes('{{')
+  );
+}
+
 export function isRelevantProviderRequest(input: {
   type: ProviderResourceType;
   method: string;
@@ -163,6 +198,8 @@ export function isRelevantProviderRequest(input: {
 }): boolean {
   if (input.type !== 'xmlhttprequest' && input.type !== 'main_frame') return false;
   if (input.method === 'OPTIONS' || input.method === 'HEAD') return false;
-  if (input.initiator?.includes(input.extensionId)) return false;
-  return !input.url.includes('replay_request=1');
+  // Session + tab scoping prevents replay loops. Extension-initiated in-page
+  // requests must remain observable: they are how we prime a stale template's
+  // exact metadata URL inside the authenticated provider tab.
+  return true;
 }

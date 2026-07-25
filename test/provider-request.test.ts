@@ -3,8 +3,10 @@ import venmoTemplate from './fixtures/venmo_transfer_venmo.json';
 import {
   configuredRequestPatterns,
   isRelevantProviderRequest,
+  canPrimeMetadataRequest,
   matchesConfiguredRequest,
   matchesRequestCriteria,
+  matchesTemplateOrigin,
   ProviderRequestCache,
   selectCompletedProviderContext,
   selectProviderContext,
@@ -166,7 +168,31 @@ describe('provider request matching', () => {
     expect(matchesConfiguredRequest(template(), 'https://other.example/primary')).toBe(false);
   });
 
-  it('ignores replay, extension, HEAD/OPTIONS, and non-network-resource requests', () => {
+  it('recognizes same-origin activity as metadata-prime context without treating it as proof data', () => {
+    expect(matchesTemplateOrigin(
+      template(),
+      'https://account.venmo.com/api/current-account',
+    )).toBe(true);
+    expect(matchesConfiguredRequest(
+      template(),
+      'https://account.venmo.com/api/current-account',
+    )).toBe(false);
+    expect(matchesTemplateOrigin(
+      template(),
+      'https://attacker.example/api/current-account',
+    )).toBe(false);
+    expect(canPrimeMetadataRequest(template())).toBe(false);
+    expect(canPrimeMetadataRequest(parseProviderTemplate({
+      ...template(),
+      metadata: {
+        ...template().metadata,
+        metadataUrl: 'https://provider.example/metadata',
+        shouldReplayRequestInPage: true,
+      },
+    }))).toBe(true);
+  });
+
+  it('accepts session-scoped in-page bootstrap requests but rejects unsupported methods/types', () => {
     const base = {
       type: 'xmlhttprequest' as const,
       method: 'GET',
@@ -181,10 +207,10 @@ describe('provider request matching', () => {
     expect(isRelevantProviderRequest({
       ...base,
       initiator: 'chrome-extension://extension-id',
-    })).toBe(false);
+    })).toBe(true);
     expect(isRelevantProviderRequest({
       ...base,
       url: 'https://provider.example/primary?replay_request=1',
-    })).toBe(false);
+    })).toBe(true);
   });
 });

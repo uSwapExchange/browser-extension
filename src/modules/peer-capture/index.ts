@@ -16,6 +16,7 @@ import {
   clearCaptureRequestCache,
   registerInterceptor,
   setCaptureCompleteHandler,
+  setProviderActivityHandler,
 } from './capture/interceptor.js';
 import {
   putSession,
@@ -27,6 +28,7 @@ import {
 import { runBuyerCapture, setBuyerDeliver } from './flows/buyer.js';
 import { installUserInputGuide } from './capture/user-input.js';
 import { runSellerCapture, setSellerDeliver } from './flows/seller.js';
+import { clearMetadataPrimeState, primeMetadataRequest } from './capture/prime.js';
 
 const CAPTURE_TTL_MS = 10 * 60 * 1000;
 const EXPIRY_ALARM = 'peer-capture:expiry';
@@ -94,6 +96,7 @@ async function startAuthenticate(params: PeerAuthenticateParams, sender: chrome.
     .filter((session) => session.connectionKey === connectionKey);
   await Promise.all(superseded.map(async (session) => {
     clearCaptureRequestCache(session.requestId);
+    clearMetadataPrimeState(session.requestId);
     await wipeSession(session.requestId);
     if (session.authTabId != null) {
       try { await chrome.tabs.remove(session.authTabId); } catch { /* already closed */ }
@@ -130,6 +133,7 @@ async function startAuthenticate(params: PeerAuthenticateParams, sender: chrome.
     await chrome.alarms.create(EXPIRY_ALARM, { periodInMinutes: 1 });
   } catch (error) {
     clearCaptureRequestCache(session.requestId);
+    clearMetadataPrimeState(session.requestId);
     await wipeSession(session.requestId);
     try { await chrome.tabs.remove(authTab.id); } catch { /* already closed */ }
     throw error;
@@ -151,6 +155,7 @@ async function sweepExpired(): Promise<void> {
   for (const session of await listSessions()) {
     if (session.expiresAt <= now) {
       clearCaptureRequestCache(session.requestId);
+      clearMetadataPrimeState(session.requestId);
       await wipeSession(session.requestId);
       deliverMetadata(session, {
         requestId: session.requestId,
@@ -173,11 +178,15 @@ export const peerCaptureModule: ExtensionModule = {
     setBuyerDeliver(deliverMetadata);
     setSellerDeliver(deliverMetadata);
     setCaptureCompleteHandler((session) => {
+      clearMetadataPrimeState(session.requestId);
       if (session.captureMode === 'buyerTee') {
         void runBuyerCapture(session.requestId);
       } else {
         void runSellerCapture(session.requestId);
       }
+    });
+    setProviderActivityHandler(async (session, context) => {
+      await primeMetadataRequest(session, context);
     });
     registerInterceptor();
     // Payment-platform hosts are optional permissions granted on demand. A
@@ -195,6 +204,12 @@ export const peerCaptureModule: ExtensionModule = {
         const session = await findAnySessionByAuthTab(tabId);
         if (session?.status !== 'awaiting_request') return;
         await maybeInstallUserInputGuide(session);
+        await primeMetadataRequest(session).catch((error) => {
+          console.warn(
+            '[peer-capture] initial template metadata prime failed',
+            error instanceof Error ? error.message : String(error),
+          );
+        });
       })();
     });
     chrome.tabs.onRemoved.addListener((tabId) => {
@@ -202,6 +217,7 @@ export const peerCaptureModule: ExtensionModule = {
         const session = await findAnySessionByAuthTab(tabId);
         if (!session) return;
         clearCaptureRequestCache(session.requestId);
+        clearMetadataPrimeState(session.requestId);
         await wipeSession(session.requestId);
         deliverMetadata(session, {
           requestId: session.requestId,
