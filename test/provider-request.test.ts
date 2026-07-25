@@ -6,6 +6,7 @@ import {
   matchesConfiguredRequest,
   matchesRequestCriteria,
   ProviderRequestCache,
+  selectCompletedProviderContext,
   selectProviderContext,
   type ProviderRequestRecord,
 } from '../src/modules/peer-capture/capture/provider-request.js';
@@ -118,6 +119,29 @@ describe('provider request matching', () => {
     expect(selectProviderContext([fallback], template())).toEqual({
       kind: 'fallback',
       request: fallback,
+    });
+  });
+
+  it('does not select context until the provider request completed successfully', () => {
+    const pending = request({
+      statusCode: undefined,
+      timestamp: undefined,
+    });
+    const rejected = request({
+      requestId: 'rejected',
+      statusCode: 401,
+      timestamp: 2,
+    });
+    const completed = request({
+      requestId: 'completed',
+      statusCode: 200,
+      timestamp: 3,
+    });
+
+    expect(selectCompletedProviderContext([pending, rejected], template())).toBeNull();
+    expect(selectCompletedProviderContext([pending, rejected, completed], template())).toEqual({
+      kind: 'primary',
+      request: completed,
     });
   });
 

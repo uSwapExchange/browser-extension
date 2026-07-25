@@ -2,7 +2,7 @@
 
 1. [x] Add reference-shaped request records, per-session request caching, and
    primary/fallback request selection with focused unit tests.
-2. [ ] Move capture completion to successful `onResponseStarted`, including
+2. [x] Move capture completion to successful `onResponseStarted`, including
    reference request filtering and response lifecycle tests.
 3. [ ] Integrate the request cache with buyer metadata resolution and replay,
    preserving uSwap encryption, redaction, consent, and delivery behavior.

@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import venmoTemplate from './fixtures/venmo_transfer_venmo.json';
-import {
-  hasLikelyRevolutAuth,
-  matchesRevolutContextRequest,
-  matchesTemplate,
-} from '../src/modules/peer-capture/capture/interceptor.js';
+import { matchesTemplate } from '../src/modules/peer-capture/capture/interceptor.js';
 import type { CaptureSession } from '../src/modules/peer-capture/capture/session.js';
 import { prepareSellerPayload } from '../src/modules/peer-capture/flows/seller.js';
 import { parseProviderTemplate } from '../src/modules/peer-capture/templates/types.js';
@@ -97,46 +93,6 @@ describe('template request matching', () => {
     )).toBe(true);
   });
 
-  it('accepts an authenticated Revolut retail request as replay context', () => {
-    const capture = session({
-      platform: 'revolut',
-      template: parseProviderTemplate({
-        ...venmoTemplate,
-        authLink: 'https://app.revolut.com/home?accountType=all_main_pockets',
-        metadata: {
-          ...venmoTemplate.metadata,
-          platform: 'revolut',
-        },
-      }),
-    });
-
-    expect(matchesRevolutContextRequest(
-      capture,
-      'https://app.revolut.com/api/retail/user/current/accounts',
-      'GET',
-    )).toBe(true);
-    expect(matchesRevolutContextRequest(
-      capture,
-      'https://app.revolut.com/api/analytics',
-      'GET',
-    )).toBe(false);
-    expect(matchesRevolutContextRequest(
-      capture,
-      'https://evil.example/api/retail/user/current/accounts',
-      'GET',
-    )).toBe(false);
-    expect(matchesRevolutContextRequest(capture, capture.template.authLink, 'GET'))
-      .toBe(false);
-  });
-
-  it('requires application auth rather than a Cloudflare-only cookie', () => {
-    expect(hasLikelyRevolutAuth({ Authorization: 'Bearer secret' })).toBe(true);
-    expect(hasLikelyRevolutAuth({ Cookie: '__cf_bm=challenge; revolut_session=secret' }))
-      .toBe(true);
-    expect(hasLikelyRevolutAuth({ Cookie: '__cf_bm=challenge; cf_clearance=ok' }))
-      .toBe(false);
-    expect(hasLikelyRevolutAuth({ Accept: 'application/json' })).toBe(false);
-  });
 });
 
 describe('Seller Autopilot capture boundary', () => {

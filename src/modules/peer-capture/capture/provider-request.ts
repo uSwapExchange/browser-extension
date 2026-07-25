@@ -104,6 +104,25 @@ export function selectProviderContext(
   return fallback ? { kind: 'fallback', request: fallback } : null;
 }
 
+export function isSuccessfulProviderResponse(request: ProviderRequestRecord): boolean {
+  return (
+    request.statusCode !== undefined
+    && request.statusCode >= 200
+    && request.statusCode < 300
+    && request.timestamp !== undefined
+  );
+}
+
+export function selectCompletedProviderContext(
+  requests: ProviderRequestRecord[],
+  template: ProviderTemplate,
+): { kind: 'primary' | 'fallback'; request: ProviderRequestRecord } | null {
+  return selectProviderContext(
+    requests.filter(isSuccessfulProviderResponse),
+    template,
+  );
+}
+
 export function configuredRequestPatterns(template: ProviderTemplate): string[] {
   const patterns: string[] = [];
   const { metadata } = template;

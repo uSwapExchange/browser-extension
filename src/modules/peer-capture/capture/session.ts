@@ -21,6 +21,10 @@ export interface CapturedRequest {
   method: string;
   headers: Record<string, string>;
   body: string;
+  responseHeaders?: Record<string, string>;
+  statusCode?: number;
+  timestamp?: number;
+  contextKind?: 'primary' | 'fallback';
 }
 
 export interface CaptureSession {
