@@ -56,13 +56,56 @@ function decodeBody(requestBody: RequestBody): string {
   return '';
 }
 
-function matchesTemplate(session: CaptureSession, url: string, method: string): boolean {
+function matchesCriteria(
+  url: string,
+  method: string,
+  body: string | undefined,
+  expectedMethod: string | undefined,
+  urlRegex: string | undefined,
+  bodyRegex: string | undefined,
+  allowUnknownBody: boolean,
+): boolean {
+  if (!urlRegex) return false;
+  if (expectedMethod && expectedMethod.toUpperCase() !== method.toUpperCase()) return false;
+  if (!new RegExp(urlRegex).test(url)) return false;
+  if (!bodyRegex) return true;
+  if (body === undefined) return allowUnknownBody;
+  return new RegExp(bodyRegex).test(body);
+}
+
+export function matchesTemplate(
+  session: CaptureSession,
+  url: string,
+  method: string,
+  body?: string,
+  allowUnknownBody = false,
+): boolean {
   const meta = session.template.metadata;
-  const methodOk = !meta.method || meta.method.toUpperCase() === method.toUpperCase();
-  if (methodOk && new RegExp(meta.urlRegex).test(url)) return true;
-  if (meta.fallbackUrlRegex && new RegExp(meta.fallbackUrlRegex).test(url)) return true;
-  if (meta.metadataUrl && url.startsWith(meta.metadataUrl)) return true;
-  return false;
+  return (
+    matchesCriteria(url, method, body, meta.method, meta.urlRegex, meta.bodyRegex, allowUnknownBody)
+    || matchesCriteria(
+      url,
+      method,
+      body,
+      meta.fallbackMethod,
+      meta.fallbackUrlRegex,
+      meta.fallbackBodyRegex,
+      allowUnknownBody,
+    )
+    || matchesCriteria(
+      url,
+      method,
+      body,
+      meta.metadataUrlMethod,
+      meta.metadataUrl ? `^${escapeRegex(meta.metadataUrl)}` : undefined,
+      meta.metadataUrlBody ? `^${escapeRegex(meta.metadataUrlBody)}$` : undefined,
+      allowUnknownBody,
+    )
+  );
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function maybeComplete(requestId: string): Promise<void> {
@@ -91,14 +134,19 @@ const onBeforeRequestListener = (
   if (details.tabId < 0) return undefined;
   void (async () => {
     const session = await findSessionByAuthTab(details.tabId);
-    if (!session || !matchesTemplate(session, details.url, details.method)) return;
+    if (!session) return;
+    const body = decodeBody(details.requestBody);
+    if (!matchesTemplate(session, details.url, details.method, body)) {
+      inflight.delete(details.requestId);
+      return;
+    }
     const existing = inflight.get(details.requestId) ?? {
       authTabId: details.tabId,
       sessionRequestId: session.requestId,
       url: details.url,
       method: details.method,
     };
-    existing.body = decodeBody(details.requestBody);
+    existing.body = body;
     inflight.set(details.requestId, existing);
     await maybeComplete(details.requestId);
   })();
@@ -111,19 +159,27 @@ const onBeforeSendHeadersListener = (
   if (details.tabId < 0) return undefined;
   void (async () => {
     const session = await findSessionByAuthTab(details.tabId);
-    if (!session || !matchesTemplate(session, details.url, details.method)) return;
+    if (!session) return;
+    const existing = inflight.get(details.requestId);
+    // onBeforeRequest runs before onBeforeSendHeaders. If it matched a
+    // body-filtered template, trust that decision; otherwise only accept
+    // criteria that do not require a body.
+    if (
+      !existing
+      && !matchesTemplate(session, details.url, details.method, undefined, true)
+    ) return;
     const headers: Record<string, string> = {};
     for (const header of details.requestHeaders ?? []) {
       if (header.name && header.value != null) headers[header.name] = header.value;
     }
-    const existing = inflight.get(details.requestId) ?? {
+    const partial = existing ?? {
       authTabId: details.tabId,
       sessionRequestId: session.requestId,
       url: details.url,
       method: details.method,
     };
-    existing.headers = headers;
-    inflight.set(details.requestId, existing);
+    partial.headers = headers;
+    inflight.set(details.requestId, partial);
     await maybeComplete(details.requestId);
   })();
   return undefined;
@@ -146,9 +202,8 @@ export function registerInterceptor(): void {
 
   const filter: chrome.webRequest.RequestFilter = { urls: allCapturePatterns() };
   chrome.webRequest.onBeforeRequest.addListener(onBeforeRequestListener, filter, ['requestBody']);
-  // `extraHeaders` is Chrome-only: Chrome needs it to expose Cookie/Authorization
-  // in onBeforeSendHeaders; Firefox includes those by default and THROWS on the
-  // unknown enum value (which would abort background startup). Branch on target.
+  // Firefox exposes the sensitive headers without `extraHeaders` and rejects
+  // that Chrome-only option, which otherwise aborts background initialization.
   const headerSpec = (IS_FIREFOX
     ? ['requestHeaders']
     : ['requestHeaders', 'extraHeaders']) as chrome.webRequest.OnBeforeSendHeadersOptions[];

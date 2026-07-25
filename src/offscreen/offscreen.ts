@@ -1,12 +1,12 @@
-/**
- * Chrome offscreen document: hosts @zkp2p/sdk cryptography + DOM/XPath parsing
- * because the MV3 service worker can't touch the DOM/WASM. The actual logic
- * lives in ./handlers.ts (shared with Firefox's background event page, which
- * runs it directly — no offscreen document there). This file is just the
- * Chrome-side RPC transport over chrome.runtime messaging.
- */
 import { dispatchOffscreen } from './handlers.js';
 import type { OffscreenRequest, OffscreenResponse } from '../core/offscreen/rpc.js';
+
+/**
+ * Hosts @zkp2p/sdk cryptography and DOM parsing. The SDK pulls in ethers/ox
+ * and needs WebCrypto + a real document; keeping it out of the service worker
+ * also keeps SW cold-start fast. Plaintext session material is held only
+ * transiently here and never persisted — only ciphertext is returned.
+ */
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   const request = message as OffscreenRequest;

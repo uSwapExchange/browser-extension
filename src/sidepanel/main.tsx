@@ -4,12 +4,8 @@ import { installPeerBridge } from './peer-bridge.js';
 
 /**
  * The side panel IS the uSwap app: a full-bleed iframe of the real web app.
- *
- * window.peer is bridged by the panel page itself (installPeerBridge) over
- * postMessage ⇄ chrome.runtime — NOT by a content script injected into the
- * iframe. This is identical on Chrome and Firefox; Firefox does not inject
- * content scripts into an app frame parented by a moz-extension:// page, so the
- * panel-relay is the only transport that works on both. See AGENTS.md.
+ * The panel page owns the iframe-to-background relay so the transport does not
+ * depend on browser-specific content-script injection into extension frames.
  */
 
 const APP_URL: string = import.meta.env.VITE_USWAP_APP_URL
@@ -26,7 +22,8 @@ function SidePanel(): React.ReactElement {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    if (iframeRef.current) installPeerBridge(iframeRef.current, APP_URL);
+    if (!iframeRef.current) return undefined;
+    return installPeerBridge(iframeRef.current, APP_URL);
   }, []);
 
   return (

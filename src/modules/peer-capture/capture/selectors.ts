@@ -1,4 +1,6 @@
 import type { ProviderTemplate, TemplateSelector } from '../templates/types.js';
+import { JSONPath } from 'jsonpath-plus';
+import { offscreenCall } from '../../../core/offscreen/rpc.js';
 import { jsonPathWithIndex } from './extract.js';
 
 /**
@@ -13,7 +15,10 @@ import { jsonPathWithIndex } from './extract.js';
 
 export interface CaptureSources {
   responseJson: unknown;
+  responseText: string;
   requestBody: string;
+  requestHeaders: Record<string, string>;
+  responseHeaders: Record<string, string>;
   url: string;
 }
 
@@ -21,30 +26,82 @@ export interface ParamResult {
   params: Record<string, unknown>;
   /** Names of params whose value derives from private request material. */
   privateParamNames: string[];
+  /** Private values are used only for leak detection, never returned publicly. */
+  privateValues: unknown[];
 }
 
-function evalSelector(selector: TemplateSelector, index: number, sources: CaptureSources): unknown {
-  const source = selector.source ?? 'responseBody';
-  if (source === 'responseBody') {
-    return jsonPathWithIndex(sources.responseJson, selector.value, index);
+function stringify(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+function jsonSource(source: TemplateSelector['source'], sources: CaptureSources): unknown {
+  switch (source) {
+    case 'requestBody':
+      try { return JSON.parse(sources.requestBody); } catch { return sources.requestBody; }
+    case 'requestHeaders':
+      return sources.requestHeaders;
+    case 'responseHeaders':
+      return sources.responseHeaders;
+    case 'url':
+      return { url: sources.url };
+    case 'responseBody':
+    default:
+      return sources.responseJson;
   }
-  const haystack = source === 'requestBody' ? sources.requestBody : sources.url;
+}
+
+function textSource(source: TemplateSelector['source'], sources: CaptureSources): string {
+  switch (source) {
+    case 'requestBody':
+      return sources.requestBody;
+    case 'requestHeaders':
+      return stringify(sources.requestHeaders);
+    case 'responseHeaders':
+      return stringify(sources.responseHeaders);
+    case 'url':
+      return sources.url;
+    case 'responseBody':
+    default:
+      return sources.responseText;
+  }
+}
+
+async function evalSelector(
+  selector: TemplateSelector,
+  index: number,
+  sources: CaptureSources,
+): Promise<unknown> {
+  const source = selector.source ?? 'responseBody';
+  const resolved = selector.value.replace(/\{\{INDEX\}\}/g, String(index));
+  if (selector.type === 'jsonPath') {
+    if (source === 'responseBody') {
+      return jsonPathWithIndex(sources.responseJson, selector.value, index);
+    }
+    return JSONPath({
+      path: resolved,
+      json: jsonSource(source, sources) as object,
+      wrap: false,
+    });
+  }
   if (selector.type === 'regex') {
-    const pattern = selector.value.replace(/\{\{INDEX\}\}/g, String(index));
-    const match = new RegExp(pattern).exec(haystack);
+    const match = new RegExp(resolved).exec(textSource(source, sources));
     return match?.[1] ?? match?.[0] ?? null;
   }
-  // jsonPath against a string source isn't meaningful; return raw.
-  return haystack;
+  const result = await offscreenCall<{ value: string | null }>('xpath-value', {
+    html: textSource(source, sources),
+    expression: resolved,
+  });
+  return result.value;
 }
 
-export function buildParams(
+export async function buildParams(
   template: ProviderTemplate,
   index: number,
   sources: CaptureSources,
-): ParamResult {
+): Promise<ParamResult> {
   const params: Record<string, unknown> = {};
   const privateParamNames: string[] = [];
+  const privateValues: unknown[] = [];
   const names = template.paramNames ?? [];
   const selectors = template.paramSelectors ?? [];
 
@@ -52,12 +109,23 @@ export function buildParams(
     const selector = selectors[i];
     const name = names[i] ?? `param_${i}`;
     if (!selector) continue;
-    params[name] = evalSelector(selector, index, sources);
-    if (selector.source === 'requestBody') privateParamNames.push(name);
+    const value = await evalSelector(selector, index, sources);
+    if (selector.source === 'requestBody') {
+      privateParamNames.push(name);
+      privateValues.push(value);
+      continue;
+    }
+    // Provider-template parameters interpolate into request URLs and the
+    // Buyer-TEE schemas declare selector-derived identifiers as strings.
+    // JSONPath preserves JSON number types (Wise's ownedByProfile/resource.id
+    // are numbers), so normalize them here before the proof reaches the
+    // attestation service.
+    params[name] = value === null || value === undefined ? value : String(value);
   }
-  // index is required by platforms that key proofs by list position.
-  params.index = index;
-  return { params, privateParamNames };
+  // params.index is platform-specific and must be added by the page when it
+  // selects a row. Sending it for single-transfer rails makes the attestation
+  // service reject otherwise-valid Wise/PayPal/Monzo captures.
+  return { params, privateParamNames, privateValues };
 }
 
 /** Interpolate {{PARAM}} placeholders in a string with built param values. */

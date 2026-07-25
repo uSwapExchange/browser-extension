@@ -1,11 +1,24 @@
 import { parseProviderTemplate, type ProviderTemplate } from './types.js';
 
 const TEMPLATE_BASE = 'https://api.zkp2p.xyz/providers';
+export const REVOLUT_ALL_POCKETS_AUTH_LINK =
+  'https://app.revolut.com/home?accountType=all_main_pockets';
 
 export interface ResolvedTemplate {
   template: ProviderTemplate;
   /** Inline templates require explicit post-extraction approval before delivery. */
   inline: boolean;
+}
+
+export function normalizePlatformTemplate(
+  platform: string,
+  template: ProviderTemplate,
+): ProviderTemplate {
+  if (platform !== 'revolut') return template;
+  return {
+    ...template,
+    authLink: REVOLUT_ALL_POCKETS_AUTH_LINK,
+  };
 }
 
 /**
@@ -18,7 +31,13 @@ export async function resolveTemplate(input: {
   providerConfig?: unknown;
 }): Promise<ResolvedTemplate> {
   if (input.providerConfig != null) {
-    return { template: parseProviderTemplate(input.providerConfig), inline: true };
+    return {
+      template: normalizePlatformTemplate(
+        input.platform,
+        parseProviderTemplate(input.providerConfig),
+      ),
+      inline: true,
+    };
   }
   const url = `${TEMPLATE_BASE}/${encodeURIComponent(input.platform)}/${encodeURIComponent(input.actionType)}.json`;
   const response = await fetch(url, { credentials: 'omit' });
@@ -26,5 +45,11 @@ export async function resolveTemplate(input: {
     throw new Error(`Failed to load template ${input.platform}/${input.actionType}: HTTP ${response.status}`);
   }
   const json: unknown = await response.json();
-  return { template: parseProviderTemplate(json), inline: false };
+  return {
+    template: normalizePlatformTemplate(
+      input.platform,
+      parseProviderTemplate(json),
+    ),
+    inline: false,
+  };
 }

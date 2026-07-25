@@ -34,6 +34,12 @@ export type OffscreenRequest =
       type: 'xpath-extract';
       id: string;
       payload: { html: string; listSelector: string; fieldSelectors: Record<string, string> };
+    }
+  | {
+      target: 'offscreen';
+      type: 'xpath-value';
+      id: string;
+      payload: { html: string; expression: string };
     };
 
 export interface OffscreenResponse {
@@ -55,14 +61,17 @@ export async function offscreenCall<T>(
   payload: Extract<OffscreenRequest, { type: typeof type }>['payload'],
   timeoutMs = 30_000,
 ): Promise<T> {
-  // Firefox has no offscreen document; its event-page background can run the
-  // @zkp2p crypto + DOM work directly, so dispatch in-process (no RPC). The
-  // import is dynamic so the offscreen handlers (and @zkp2p/sdk) don't get
-  // pulled into the Chrome service-worker bundle, which uses the RPC path.
+  // Firefox has no offscreen document. Its event-page background has DOM and
+  // WebCrypto, so run the same handlers in-process.
   if (IS_FIREFOX) {
     const id = nextId();
     const { dispatchOffscreen } = await import('../../offscreen/handlers.js');
-    return (await dispatchOffscreen({ target: 'offscreen', type, id, payload } as OffscreenRequest)) as T;
+    return (await dispatchOffscreen({
+      target: 'offscreen',
+      type,
+      id,
+      payload,
+    } as OffscreenRequest)) as T;
   }
 
   await ensureOffscreenDocument();

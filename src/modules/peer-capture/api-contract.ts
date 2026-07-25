@@ -15,6 +15,8 @@ export interface PeerAuthenticateParams {
   platform: string;
   captureMode: PeerCaptureMode;
   attestationServiceUrl?: string;
+  /** Override when the attestation schema differs from the capture template. */
+  attestationActionType?: string;
   /** Inline provider template — requires explicit user approval before results post. */
   providerConfig?: unknown;
 }
