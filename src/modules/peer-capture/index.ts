@@ -22,6 +22,7 @@ import {
 } from './capture/session.js';
 import { runBuyerCapture, setBuyerDeliver } from './flows/buyer.js';
 import { installUserInputGuide } from './capture/user-input.js';
+import { primeRevolutCapture } from './capture/prime.js';
 import { runSellerCapture, setSellerDeliver } from './flows/seller.js';
 
 const CAPTURE_TTL_MS = 10 * 60 * 1000;
@@ -186,7 +187,22 @@ export const peerCaptureModule: ExtensionModule = {
       if (changeInfo.status !== 'complete') return;
       void (async () => {
         const session = await findAnySessionByAuthTab(tabId);
-        if (session?.status === 'awaiting_request') await maybeInstallUserInputGuide(session);
+        if (session?.status !== 'awaiting_request') return;
+        await maybeInstallUserInputGuide(session);
+        try {
+          await primeRevolutCapture(session);
+        } catch (error) {
+          await wipeSession(session.requestId);
+          deliverMetadata(session, {
+            requestId: session.requestId,
+            platform: session.platform,
+            metadata: [],
+            expiresAt: session.expiresAt,
+            error: `Revolut capture could not start: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          });
+        }
       })();
     });
     chrome.tabs.onRemoved.addListener((tabId) => {
