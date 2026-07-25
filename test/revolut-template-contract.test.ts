@@ -10,6 +10,7 @@ import { buildParams } from '../src/modules/peer-capture/capture/selectors.js';
 import {
   normalizePlatformTemplate,
   REVOLUT_ALL_POCKETS_AUTH_LINK,
+  REVOLUT_SEE_ALL_TRANSACTIONS_XPATH,
 } from '../src/modules/peer-capture/templates/fetch.js';
 import { parseProviderTemplate } from '../src/modules/peer-capture/templates/types.js';
 
@@ -63,9 +64,17 @@ const transactions = [
 ];
 
 describe('live Revolut provider-template contract', () => {
-  it('retains the entire hosted contract and changes only the auth-link wrapper', () => {
+  it('retains the hosted capture contract and adds only the all-pockets guide wrapper', () => {
     expect(template.authLink).toBe(REVOLUT_ALL_POCKETS_AUTH_LINK);
-    expect(template.metadata).toEqual(revolutTemplateJson.metadata);
+    const { userInput, ...captureMetadata } = template.metadata;
+    expect(captureMetadata).toEqual(revolutTemplateJson.metadata);
+    expect(userInput).toEqual({
+      promptText:
+        'Open Transactions using “See all,” or refresh this Transactions page if it is already open.',
+      transactionXpath: REVOLUT_SEE_ALL_TRANSACTIONS_XPATH,
+      waitForXpathMs: 20_000,
+      pollIntervalMs: 250,
+    });
     expect(template.metadata.shouldReplayRequestInPage).toBe(true);
     expect(template.metadata.proofMetadataSelectors).toHaveLength(6);
     expect(template.mobile).toEqual(revolutTemplateJson.mobile);

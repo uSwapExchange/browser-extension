@@ -80,15 +80,19 @@ describe('provider template parsing', () => {
     });
     const normalized = normalizePlatformTemplate('revolut', template);
     expect(normalized.authLink).toBe(REVOLUT_ALL_POCKETS_AUTH_LINK);
-    expect(normalized.metadata).toEqual(template.metadata);
+    const { userInput, ...captureMetadata } = normalized.metadata;
+    expect(captureMetadata).toEqual(template.metadata);
+    expect(userInput?.transactionXpath).toContain('"see all"');
     expect(template.metadata.shouldReplayRequestInPage).toBe(true);
   });
 
-  it('preserves the complete live Revolut template outside the auth-link wrapper', () => {
+  it('preserves the complete live Revolut capture template outside the UX wrapper', () => {
     const template = parseProviderTemplate(revolutTemplate);
     const normalized = normalizePlatformTemplate('revolut', template);
     expect(normalized.authLink).toBe(REVOLUT_ALL_POCKETS_AUTH_LINK);
-    expect(normalized.metadata).toEqual(template.metadata);
+    const { userInput, ...captureMetadata } = normalized.metadata;
+    expect(captureMetadata).toEqual(template.metadata);
+    expect(userInput?.promptText).toContain('See all');
     expect(normalized.paramNames).toEqual([]);
     expect(normalized.paramSelectors).toEqual([]);
     expect(normalized.metadata.proofMetadataSelectors).toHaveLength(6);

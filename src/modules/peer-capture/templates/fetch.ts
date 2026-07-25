@@ -3,6 +3,11 @@ import { parseProviderTemplate, type ProviderTemplate } from './types.js';
 const TEMPLATE_BASE = 'https://api.zkp2p.xyz/providers';
 export const REVOLUT_ALL_POCKETS_AUTH_LINK =
   'https://app.revolut.com/home?accountType=all_main_pockets';
+export const REVOLUT_SEE_ALL_TRANSACTIONS_XPATH =
+  '//*[self::a or self::button or @role="button"]['
+  + 'contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "see all")'
+  + ' or contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "view all")'
+  + ']';
 
 export interface ResolvedTemplate {
   template: ProviderTemplate;
@@ -18,6 +23,23 @@ export function normalizePlatformTemplate(
   return {
     ...template,
     authLink: REVOLUT_ALL_POCKETS_AUTH_LINK,
+    metadata: {
+      ...template.metadata,
+      // Peer's hosted Revolut template requires a genuine transactions request
+      // before the extension can capture the authenticated context, but it does
+      // not currently provide userInput instructions. The all-pockets URL is
+      // required for users whose transfer currency differs from their primary
+      // account. Guide them to make Revolut issue the configured request; the
+      // request matching/replay/extraction lifecycle remains entirely driven by
+      // the provider template and shared by every platform.
+      userInput: template.metadata.userInput ?? {
+        promptText:
+          'Open Transactions using “See all,” or refresh this Transactions page if it is already open.',
+        transactionXpath: REVOLUT_SEE_ALL_TRANSACTIONS_XPATH,
+        waitForXpathMs: 20_000,
+        pollIntervalMs: 250,
+      },
+    },
   };
 }
 
