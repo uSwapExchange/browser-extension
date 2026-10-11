@@ -30,7 +30,7 @@ for (const item of cases) {
     const parsed = parseReplayPayload(raw, template.metadata.preprocessRegex);
     const extracted = extractJsonRows(template, parsed.json);
     const params = await buildParams(template, 0, {responseJson:parsed.json,responseText:parsed.text,requestBody:'{"operationName":"TestCapture","privateSession":"never-share"}',requestHeaders:{Cookie:'private-session'},responseHeaders:{},url:template.url});
-    const rows=prepareBuyerRows(template.metadata.platform, extracted, new Map([[0,params.params]]));
+    const rows=prepareBuyerRows(template.metadata.platform, extracted, new Map([[0,params.params]]), { template, inline: false });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({originalIndex:0,paymentId:item.id,hidden:false,params:item.params});
     if (item.file.startsWith('xmoney')) expect(rows[0]).toMatchObject({ amount: '50000000', recipient: 'example_payee', currency: 'USD' });

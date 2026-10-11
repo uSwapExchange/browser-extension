@@ -1,4 +1,4 @@
-import type { ExtractedRow } from '../templates/types.js';
+import type { ExtractedRow, ProviderTemplate } from '../templates/types.js';
 
 const missing = (value: unknown) => value == null || value === '';
 
@@ -7,17 +7,26 @@ export function prepareBuyerRows(
   platform: string,
   rows: ExtractedRow[],
   paramsByIndex: Map<number, Record<string, unknown>>,
+  source?: { template: ProviderTemplate; inline: boolean },
 ): ExtractedRow[] {
+  const selectsWiseTransfer = platform === 'wise' && source?.inline === false
+    && source.template.actionType === 'transfer_wise'
+    && source.template.method === 'GET'
+    && source.template.url === 'https://wise.com/gateway/v3/profiles/{{PROFILE_ID}}/transfers/{{TRANSACTION_ID}}';
   return rows.map((row) => {
     const params = paramsByIndex.get(row.originalIndex) ?? {};
     let hidden = row.hidden;
-    // Wise's activity feed can omit visibleOn. Its proof URL instead selects
-    // the actual transfer by two identifiers, where the TEE verifies the date.
-    // Never manufacture a display date or relax payment-identifying fields.
-    if (platform === 'wise' && missing(row.date)) {
-      hidden = ['amount', 'paymentId', 'recipient', 'currency'].some((field) => missing(row[field]))
+    // Activity rows are selection metadata, not the attested transfer. Wise
+    // can omit date and currency here. The hosted proof selects the actual
+    // transfer by ID; its attestation still verifies the payment's terms.
+    // Leave absent display fields absent, and retain strict inline handling.
+    if (selectsWiseTransfer) {
+      hidden = Object.entries(row).some(([field, value]) =>
+        !['date', 'currency', 'hidden', 'originalIndex', 'params'].includes(field) && missing(value))
+        || ['amount', 'paymentId', 'recipient'].some((field) => missing(row[field]))
         || !/^\d+$/.test(String(params.PROFILE_ID ?? ''))
-        || !/^\d+$/.test(String(params.TRANSACTION_ID ?? ''));
+        || !/^\d+$/.test(String(params.TRANSACTION_ID ?? ''))
+        || String(row.paymentId) !== String(params.TRANSACTION_ID);
     }
     if (Object.values(params).some(missing)) hidden = true;
     return { ...row, hidden, params };

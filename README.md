@@ -214,7 +214,7 @@ no eval permission or remote executable code is enabled.
 ### Testing the Chrome ZIP
 
 Disable the installed uSwap extension first so only one relay is active. Extract
-`uswap-extension-0.6.11.zip`, open `chrome://extensions`, turn on Developer mode,
+`uswap-extension-0.6.12.zip`, open `chrome://extensions`, turn on Developer mode,
 choose **Load unpacked**, and select the extracted folder containing `manifest.json`.
 Reload the uSwap tab and retry verification in the account that sent the payment.
 For an already paid order, do not send another payment. Report the exact new error
@@ -235,3 +235,15 @@ metadata field retain strict checks. No credential value is returned to the app.
 Failed verification now returns to the requesting tab and closes the temporary
 provider tab too, unless the provider template explicitly requests keeping it
 open. Real-account acceptance testing is still required.
+
+
+## 0.6.12 — Wise activity metadata versus transfer proof
+
+Wise activity feeds may omit currency as well as the display date. The hosted
+Wise single-transfer proof now permits those missing display fields when the
+response contains amount, recipient, and matching numeric transfer/profile IDs.
+Absent fields remain absent: no currency or date is inferred from the order.
+The actual transfer attestation must still validate the payment before release.
+Inline templates and other proof targets retain strict missing-field handling.
+No additional provider requests are introduced. Real-account acceptance testing
+is still required; this release addresses the reported metadata-selection blocker.

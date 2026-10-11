@@ -71,7 +71,9 @@ export async function runBuyerCapture(requestId: string): Promise<void> {
         paramsByIndex.set(row.originalIndex, built.params);
         privateValues.push(...built.privateValues);
       }
-      const metadata = prepareBuyerRows(session.platform, rows, paramsByIndex);
+      const metadata = prepareBuyerRows(session.platform, rows, paramsByIndex, {
+        template: session.template, inline: session.inline,
+      });
       assertBuyerMetadataPrivacy({
         rows: metadata, platform: session.platform, inline: session.inline,
         headers: session.captured!.headers, secretHeaders: session.template.secretHeaders,

@@ -23,7 +23,7 @@ async function wiseRows(response: unknown) {
       requestBody: '', requestHeaders: {}, responseHeaders: {}, url: 'https://wise.com/',
     })).params);
   }
-  return prepareBuyerRows('wise', rows, params);
+  return prepareBuyerRows('wise', rows, params, { template, inline: false });
 }
 
 describe('usable payment selection', () => {
@@ -33,16 +33,28 @@ describe('usable payment selection', () => {
       params: { TRANSACTION_ID: '999000001', PROFILE_ID: '123456' } });
     expect(rows[0]?.date).toBeUndefined();
   });
-  it('does not relax amount, recipient, currency, or transfer/profile identification', async () => {
-    for (const field of ['primaryAmount', 'title', 'currency', 'ownedByProfile', 'resource']) {
+  it('does not relax amount, recipient, or transfer/profile identification', async () => {
+    for (const field of ['primaryAmount', 'title', 'ownedByProfile', 'resource']) {
       const item: Record<string, unknown> = { ...wiseHistory[0] };
       delete item[field];
       expect((await wiseRows([item]))[0]?.hidden).toBe(true);
     }
   });
+  it('selects an ID-backed Wise activity without currency or date and never supplies guessed values', async () => {
+    const rows = await wiseRows([{ ...wiseHistory[0], currency: undefined }]);
+    expect(rows[0]?.hidden).toBe(false);
+    expect(rows[0]?.currency).toBeUndefined();
+    expect(rows[0]?.date).toBeUndefined();
+    const params = new Map([[0, rows[0]!.params as Record<string, unknown>]]);
+    const template = parseProviderTemplate(wise);
+    expect(prepareBuyerRows('wise', [{ ...rows[0]!, hidden: true }], params, { template, inline: true })[0]?.hidden).toBe(true);
+    expect(prepareBuyerRows('wise', [{ ...rows[0]!, hidden: true }], params, { template: { ...template, url: 'https://wise.com/other' }, inline: false })[0]?.hidden).toBe(true);
+    expect(prepareBuyerRows('wise', rows, new Map([[0, { PROFILE_ID: '123456', TRANSACTION_ID: '999000002' }]]), { template, inline: false })[0]?.hidden).toBe(true);
+  });
   it('distinguishes an empty account from returned but incomplete payment details', async () => {
     expect(unusableRowsMessage('wise', [])).toContain('No wise transactions were returned');
-    const rows = await wiseRows([{ ...wiseHistory[0], currency: undefined }]);
+    const rows = await wiseRows([{ ...wiseHistory[0], primaryAmount: undefined, currency: undefined }]);
+    expect(rows[0]?.hidden).toBe(true);
     const message = unusableRowsMessage('wise', rows);
     expect(message).toContain('1 history item(s)');
     expect(message).toContain('currency');
