@@ -214,9 +214,24 @@ no eval permission or remote executable code is enabled.
 ### Testing the Chrome ZIP
 
 Disable the installed uSwap extension first so only one relay is active. Extract
-`uswap-extension-0.6.10.zip`, open `chrome://extensions`, turn on Developer mode,
+`uswap-extension-0.6.11.zip`, open `chrome://extensions`, turn on Developer mode,
 choose **Load unpacked**, and select the extracted folder containing `manifest.json`.
 Reload the uSwap tab and retry verification in the account that sent the payment.
 For an already paid order, do not send another payment. Report the exact new error
 if verification still fails. GitHub releases do not update the Chrome Web Store
 installation automatically.
+
+
+## 0.6.11 — Wise identifier collision and tab cleanup
+
+The 0.6.10 defense-in-depth cookie comparison also compared Wise's numeric
+PROFILE_ID / TRANSACTION_ID proof parameters with cookie context values. A
+public response ID repeated in a context cookie could block an otherwise valid
+capture. Only those two numeric fields from the hosted Wise template are now
+excluded from the cookie-atom comparison. Full cookie headers, authorization
+and secret headers, private selectors, inline templates, and every other
+metadata field retain strict checks. No credential value is returned to the app.
+
+Failed verification now returns to the requesting tab and closes the temporary
+provider tab too, unless the provider template explicitly requests keeping it
+open. Real-account acceptance testing is still required.

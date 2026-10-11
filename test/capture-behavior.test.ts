@@ -4,7 +4,7 @@ import { extractJsonRows } from '../src/modules/peer-capture/capture/extract.js'
 import { buildParams } from '../src/modules/peer-capture/capture/selectors.js';
 import { prepareBuyerRows, unusableRowsMessage } from '../src/modules/peer-capture/capture/buyer-rows.js';
 import { captureTarget, isPlatformUrl, validateAttestationUrl } from '../src/modules/peer-capture/templates/target.js';
-import { assertNoPrivateLeak } from '../src/modules/peer-capture/capture/redact.js';
+import { assertNoPrivateLeak, assertBuyerMetadataPrivacy } from '../src/modules/peer-capture/capture/redact.js';
 import { captureErrorMessage } from '../src/modules/peer-capture/capture/error.js';
 import wise from './fixtures/wise_transfer_wise.json';
 
@@ -95,4 +95,19 @@ it("restricts X Money account access to the requested x.com host", () => {
   expect(isPlatformUrl("xmoney", "https://subdomain.x.com/i/money/transactions")).toBe(false);
   expect(isPlatformUrl("xmoney", "https://x.com.evil.test/i/money/transactions")).toBe(false);
   expect(isPlatformUrl("xmoney", "https://xmoney.com/")).toBe(false);
+});
+
+
+it('allows hosted Wise response IDs that also occur in context cookies while withholding credentials everywhere else', async () => {
+  const rows = await wiseRows(wiseHistory);
+  const input = { rows, platform:'wise', inline:false, headers:{Cookie:'selectedProfile=123456; session=private-session-token'}, privateValues:[] };
+  expect(() => assertNoPrivateLeak(rows,['123456'])).toThrow(); // reproduces 0.6.10's actual guard failure
+  expect(() => assertBuyerMetadataPrivacy(input)).not.toThrow();
+  expect(() => assertBuyerMetadataPrivacy({...input, inline:true})).toThrow();
+  expect(() => assertBuyerMetadataPrivacy({...input,headers:{...input.headers,Authorization:'Bearer 123456'}})).toThrow();
+  expect(() => assertBuyerMetadataPrivacy({...input,privateValues:['123456']})).toThrow();
+  expect(() => assertBuyerMetadataPrivacy({...input,rows:[{...rows[0]!,params:{PROFILE_ID:'123456',credential:'private-session-token'}}]})).toThrow();
+  expect(() => assertBuyerMetadataPrivacy({...input,rows:[{...rows[0]!,params:{PROFILE_ID:'private-session-token'}}]})).toThrow();
+  expect(() => assertBuyerMetadataPrivacy({...input,rows:[{...rows[0]!,params:{PROFILE_ID:'123456',credential:'123456'}}]})).toThrow();
+  expect(() => assertBuyerMetadataPrivacy({...input,rows:[{...rows[0]!,params:{credential:input.headers.Cookie}}]})).toThrow();
 });
