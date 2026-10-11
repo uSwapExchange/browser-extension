@@ -52,3 +52,45 @@ export function assertNoPrivateLeak(rows: ExtractedRow[], privateValues: unknown
     }
   }
 }
+
+
+/** Cookie context can contain public account IDs as well as credentials.
+ * Wise's hosted template deliberately exports numeric profile/transfer IDs
+ * from its response. Do not mistake those exact proof fields for a cookie
+ * leak. Raw cookies, secret headers, private selectors and every other field
+ * remain subject to the strict check. Inline templates get no exception.
+ */
+export function assertBuyerMetadataPrivacy(input: {
+  rows: ExtractedRow[];
+  platform: string;
+  inline: boolean;
+  headers: Record<string, string>;
+  secretHeaders?: string[];
+  privateValues: unknown[];
+}): void {
+  const privateValues = [...input.privateValues];
+  const cookieValues: unknown[] = [];
+  for (const [name, value] of Object.entries(input.headers)) {
+    if (/cookie|authorization|token|csrf|xsrf|api[-_]key/i.test(name)
+      || input.secretHeaders?.some((secret) => secret.toLowerCase() === name.toLowerCase())) {
+      privateValues.push(value);
+      if (/cookie/i.test(name)) {
+        for (const part of value.split(';')) {
+          const separator = part.indexOf('=');
+          if (separator >= 0) cookieValues.push(part.slice(separator + 1).trim());
+        }
+      }
+      if (/authorization/i.test(name)) privateValues.push(value.replace(/^Bearer\s+/i, ''));
+    }
+  }
+  assertNoPrivateLeak(input.rows, privateValues);
+  const cookieRows = input.rows.map((row) => {
+    if (input.platform !== 'wise' || input.inline) return row;
+    const params = { ...(row.params as Record<string, unknown> ?? {}) };
+    for (const name of ['PROFILE_ID', 'TRANSACTION_ID']) {
+      if (typeof params[name] === 'string' && /^\d+$/.test(params[name] as string)) delete params[name];
+    }
+    return { ...row, params };
+  });
+  assertNoPrivateLeak(cookieRows, cookieValues);
+}

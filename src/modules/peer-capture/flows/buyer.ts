@@ -3,7 +3,7 @@ import { openPrompt } from '../../../core/consent/prompt.js';
 import { busEvent } from '../../../core/bus/protocol.js';
 import { extractRows } from '../capture/extract.js';
 import { buildParams, type CaptureSources } from '../capture/selectors.js';
-import { assertNoPrivateLeak } from '../capture/redact.js';
+import { assertBuyerMetadataPrivacy } from '../capture/redact.js';
 import { captureErrorMessage } from '../capture/error.js';
 import { prepareBuyerRows, unusableRowsMessage } from '../capture/buyer-rows.js';
 import { resolveMetadataPayload } from '../capture/metadata-engine.js';
@@ -71,19 +71,12 @@ export async function runBuyerCapture(requestId: string): Promise<void> {
         paramsByIndex.set(row.originalIndex, built.params);
         privateValues.push(...built.privateValues);
       }
-      // Header credentials remain private regardless of template declarations.
-      for (const [name, value] of Object.entries(session.captured!.headers)) {
-        if (/cookie|authorization|token|csrf|xsrf|api[-_]key/i.test(name)
-          || session.template.secretHeaders?.some((secret) => secret.toLowerCase() === name.toLowerCase())) {
-          privateValues.push(value);
-          if (/cookie/i.test(name)) {
-            for (const part of value.split(';')) privateValues.push(part.slice(part.indexOf('=') + 1).trim());
-          }
-          if (/authorization/i.test(name)) privateValues.push(value.replace(/^Bearer\s+/i, ''));
-        }
-      }
       const metadata = prepareBuyerRows(session.platform, rows, paramsByIndex);
-      assertNoPrivateLeak(metadata, privateValues);
+      assertBuyerMetadataPrivacy({
+        rows: metadata, platform: session.platform, inline: session.inline,
+        headers: session.captured!.headers, secretHeaders: session.template.secretHeaders,
+        privateValues,
+      });
       return metadata;
     };
     let metadata: PeerMetadataRow[];
@@ -154,6 +147,7 @@ export async function runBuyerCapture(requestId: string): Promise<void> {
     if (!await isLiveSession(session)) return;
     await wipeSession(requestId);
     deliverError(session, captureErrorMessage(error, session.captured));
+    await finishProviderTab(session);
   }
 }
 
