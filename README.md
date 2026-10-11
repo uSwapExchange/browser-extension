@@ -214,7 +214,7 @@ no eval permission or remote executable code is enabled.
 ### Testing the Chrome ZIP
 
 Disable the installed uSwap extension first so only one relay is active. Extract
-`uswap-extension-0.6.12.zip`, open `chrome://extensions`, turn on Developer mode,
+`uswap-extension-0.6.13.zip`, open `chrome://extensions`, turn on Developer mode,
 choose **Load unpacked**, and select the extracted folder containing `manifest.json`.
 Reload the uSwap tab and retry verification in the account that sent the payment.
 For an already paid order, do not send another payment. Report the exact new error
@@ -247,3 +247,15 @@ The actual transfer attestation must still validate the payment before release.
 Inline templates and other proof targets retain strict missing-field handling.
 No additional provider requests are introduced. Real-account acceptance testing
 is still required; this release addresses the reported metadata-selection blocker.
+
+
+## 0.6.13 — Store data declarations
+
+Firefox's built-in consent declares financial/payment data, identifying payment
+metadata, authentication information, and website content. Verification handles
+selected payment-history responses and session headers/cookies, encrypting
+session material to the attestation service before delivery to the requesting
+app. These declarations describe existing behavior; capture logic is unchanged.
+Firefox requires acceptance of these data permissions when installing/updating.
+Matching readable source and reproducible build instructions must accompany
+the minified Firefox package submitted to AMO.

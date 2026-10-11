@@ -78,7 +78,7 @@ export default defineManifest({
             // install range the AMO validator cannot actually guarantee.
             strict_min_version: '142.0',
             data_collection_permissions: {
-              required: ['financialAndPaymentInfo'],
+              required: ['financialAndPaymentInfo', 'personallyIdentifyingInfo', 'authenticationInfo', 'websiteContent'],
             },
           },
         },
