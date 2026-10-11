@@ -11,6 +11,9 @@ interface BusMessage {
   channel?: unknown;
   kind?: unknown;
   id?: unknown;
+  module?: unknown;
+  type?: unknown;
+  payload?: unknown;
 }
 
 function isBusMessage(value: unknown): value is BusMessage {
@@ -22,8 +25,9 @@ function isBusMessage(value: unknown): value is BusMessage {
   );
 }
 
-function isBusRequest(value: unknown): value is { id: string } {
-  return isBusMessage(value) && value.kind === 'req' && typeof value.id === 'string';
+function isBusRequest(value: unknown): value is { id: string; module: string; type: string; payload?: unknown } {
+  return isBusMessage(value) && value.kind === 'req' && typeof value.id === 'string'
+    && value.module === 'peer-capture' && typeof value.type === 'string';
 }
 
 function isBusEvent(value: unknown): boolean {
@@ -71,7 +75,10 @@ export function installPeerBridge(iframe: HTMLIFrameElement, appUrl: string): ()
     }
     if (!isBusRequest(data)) return;
     ensurePort();
-    chrome.runtime.sendMessage(data).then(
+    chrome.runtime.sendMessage({
+    channel: BUS_CHANNEL, kind: 'req', id: data.id,
+    module: data.module, type: data.type, payload: data.payload,
+  }).then(
       (response: unknown) => iframe.contentWindow?.postMessage(response, appOrigin),
       (error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);

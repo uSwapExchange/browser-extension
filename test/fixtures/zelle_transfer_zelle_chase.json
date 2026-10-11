@@ -1,0 +1,45 @@
+{
+  "actionType": "transfer_zelle_chase",
+  "authLink": "https://secure.chase.com/web/auth/dashboard#/dashboard/quickPay/paymentsActivity/index",
+  "body": "pageId=&sortBy=PROCESS_DATE&orderBy=DESC",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "POST",
+    "platform": "zelle",
+    "preprocessRegex": "",
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "$.listItems",
+      "transactionJsonPathSelectors": {
+        "amount": "$.amount",
+        "paymentId": "$.id",
+        "recipient": "$.recipientName",
+        "date": "$.date",
+        "currency": "$.currency",
+        "status": "$.verboseStatus"
+      }
+    },
+    "urlRegex": "https://secure.chase.com/svc/rr/payments/secure/v1/quickpay/payment/activity/list$",
+    "userInput": {
+      "promptText": "Click Money Sent to proceed with authentication",
+      "transactionXpath": "//a[@id='bottom-quickpay_money_sent_menu_item']"
+    }
+  },
+  "method": "POST",
+  "mobile": {
+    "external": {
+      "actionLink": "chase://",
+      "appStoreLink": "https://apps.apple.com/bb/app/chase-mobile-u-s/id298867247",
+      "playStoreLink": "https://play.google.com/store/apps/details?id=com.chase.sig.android"
+    },
+    "includeAdditionalCookieDomains": [],
+    "useExternalAction": true,
+    "userAgent": {
+      "android": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+      "ios": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+    }
+  },
+  "paramNames": [],
+  "paramSelectors": [],
+  "url": "https://secure.chase.com/svc/rr/payments/secure/v1/quickpay/payment/activity/list"
+}

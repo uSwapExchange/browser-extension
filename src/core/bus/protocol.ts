@@ -66,7 +66,10 @@ export function isBusMessage(value: unknown): value is BusMessage {
 }
 
 export function isBusRequest(value: unknown): value is BusRequest {
-  return isBusMessage(value) && value.kind === 'req';
+  return isBusMessage(value) && value.kind === 'req'
+    && typeof (value as BusRequest).id === 'string'
+    && typeof (value as BusRequest).module === 'string'
+    && typeof (value as BusRequest).type === 'string';
 }
 
 export function isBusResponse(value: unknown): value is BusResponse {

@@ -4,10 +4,13 @@ import { busEvent } from '../../../core/bus/protocol.js';
 import { extractRows } from '../capture/extract.js';
 import { buildParams, type CaptureSources } from '../capture/selectors.js';
 import { assertNoPrivateLeak } from '../capture/redact.js';
+import { captureErrorMessage } from '../capture/error.js';
+import { prepareBuyerRows, unusableRowsMessage } from '../capture/buyer-rows.js';
 import { resolveMetadataPayload } from '../capture/metadata-engine.js';
 import {
   getSession,
-  putSession,
+  isLiveSession,
+  updateLiveSession,
   wipeSession,
   type CaptureSession,
 } from '../capture/session.js';
@@ -50,91 +53,97 @@ export async function runBuyerCapture(requestId: string): Promise<void> {
   if (!session || !session.captured) return;
 
   try {
-    await putSession({ ...session, status: 'extracting' });
-    const payload = await resolveMetadataPayload({
-      context: session.captured,
-      template: session.template,
-      authTabId: session.authTabId,
-    });
-    const rows = await extractRows(
-      session.template,
-      payload.parsed.text,
-      payload.parsed.json,
-    );
-    if (rows.length === 0) throw new Error('No transactions found to capture');
-
-    const sources: CaptureSources = {
-      responseJson: payload.parsed.json,
-      responseText: payload.parsed.text,
-      requestBody: session.captured.body,
-      requestHeaders: session.captured.headers,
-      responseHeaders: payload.response.headers,
-      url: payload.request.url,
+    if (!await isLiveSession(session) || !await updateLiveSession(session, 'extracting')) return;
+    const readRows = async (inPage?: boolean) => {
+      const payload = await resolveMetadataPayload({
+        context: session.captured!, template: session.template, authTabId: session.authTabId, inPage,
+      });
+      const rows = await extractRows(session.template, payload.parsed.text, payload.parsed.json);
+      const sources: CaptureSources = {
+        responseJson: payload.parsed.json, responseText: payload.parsed.text,
+        requestBody: session.captured!.body, requestHeaders: session.captured!.headers,
+        responseHeaders: payload.response.headers, url: payload.request.url,
+      };
+      const privateValues: unknown[] = [];
+      const paramsByIndex = new Map<number, Record<string, unknown>>();
+      for (const row of rows) {
+        const built = await buildParams(session.template, row.originalIndex, sources);
+        paramsByIndex.set(row.originalIndex, built.params);
+        privateValues.push(...built.privateValues);
+      }
+      // Header credentials remain private regardless of template declarations.
+      for (const [name, value] of Object.entries(session.captured!.headers)) {
+        if (/cookie|authorization|token|csrf|xsrf|api[-_]key/i.test(name)
+          || session.template.secretHeaders?.some((secret) => secret.toLowerCase() === name.toLowerCase())) {
+          privateValues.push(value);
+          if (/cookie/i.test(name)) {
+            for (const part of value.split(';')) privateValues.push(part.slice(part.indexOf('=') + 1).trim());
+          }
+          if (/authorization/i.test(name)) privateValues.push(value.replace(/^Bearer\s+/i, ''));
+        }
+      }
+      const metadata = prepareBuyerRows(session.platform, rows, paramsByIndex);
+      assertNoPrivateLeak(metadata, privateValues);
+      return metadata;
     };
-
-    // Build per-row params up front so the page can select by metadata and
-    // get the matching params. Collect private values to enforce redaction.
-    const privateValues: unknown[] = [];
-    const paramsByIndex = new Map<number, Record<string, unknown>>();
-    for (const row of rows) {
-      const built = await buildParams(session.template, row.originalIndex, sources);
-      paramsByIndex.set(row.originalIndex, built.params);
-      privateValues.push(...built.privateValues);
+    let metadata: PeerMetadataRow[];
+    let retriedInPage = false;
+    try {
+      metadata = await readRows();
+    } catch (error) {
+      if (session.platform !== 'wise' || !await isLiveSession(session)) throw error;
+      // One retry, using the actual logged-in tab's cookie context. No payment
+      // requests are sent: this replays only the intercepted history query.
+      retriedInPage = true;
+      metadata = await readRows(true);
     }
-    // Secret-header values are private too.
-    for (const name of session.template.secretHeaders ?? []) {
-      const matched = Object.keys(session.captured.headers)
-        .find((header) => header.toLowerCase() === name.toLowerCase());
-      const value = matched ? session.captured.headers[matched] : undefined;
-      if (value) privateValues.push(value);
+    if (!retriedInPage && session.platform === 'wise' && !metadata.some((row) => !row.hidden)
+      && await isLiveSession(session)) {
+      metadata = await readRows(true);
     }
-    assertNoPrivateLeak(rows, privateValues);
-
+    if (!metadata.some((row) => !row.hidden)) {
+      throw new Error(unusableRowsMessage(session.platform, metadata as import('../templates/types.js').ExtractedRow[]));
+    }
+    if (!await isLiveSession(session)) return;
     // Inline templates require explicit approval before any result is posted.
-    if (session.inline) {
-      await putSession({ ...session, status: 'awaiting_approval' });
+    if (session.inline && !session.inlineApproved) {
+      if (!await updateLiveSession(session, 'awaiting_approval')) return;
       const approved = await openPrompt({
         kind: 'inline-template',
         origin: session.origin,
         detail: {
           platform: session.platform,
           actionType: session.actionType,
-          rows: rows.length,
+          rows: metadata.length,
           paramNames: session.template.paramNames,
         },
       });
       if (!approved) {
-        await wipeSession(requestId);
-        deliverError(session, 'Capture declined');
-        return;
+        throw new Error('Capture declined');
       }
     }
 
+    if (!await isLiveSession(session)) return;
     // Encrypt the captured session material in the offscreen document.
     const sessionMaterial: Record<string, string> = { ...session.captured.headers };
     if (session.captured.body) sessionMaterial.body = session.captured.body;
     const { encryptedSessionMaterial } = await offscreenCall<{ encryptedSessionMaterial: string }>(
       'encrypt-buyer-tee',
       {
-        platform: session.platform,
+        platform: session.actionPlatform ?? session.platform,
         actionType: session.attestationActionType,
         attestationServiceUrl: session.attestationServiceUrl,
         sessionMaterial,
       },
     );
 
-    // The page selects the matching row; we hand it the rows plus the params
-    // for the first row, and embed per-row params on each metadata row so the
-    // page can pick by originalIndex.
-    const metadata: PeerMetadataRow[] = rows.map((row) => ({
-      ...row,
-      params: paramsByIndex.get(row.originalIndex),
-    }));
-    const firstParams = paramsByIndex.get(rows[0]!.originalIndex) ?? {};
-
+    if (!await isLiveSession(session)) return;
+    const firstParams = metadata.find((row) => !row.hidden)?.params as Record<string, unknown> ?? {};
     deliver(session, {
       requestId: session.requestId,
-      platform: session.template.metadata.platform,
+      platform: session.platform,
+      actionPlatform: session.actionPlatform ?? session.platform,
+      actionType: session.attestationActionType,
       metadata,
       expiresAt: session.expiresAt,
       buyerTeeCapture: { encryptedSessionMaterial, params: firstParams },
@@ -142,8 +151,9 @@ export async function runBuyerCapture(requestId: string): Promise<void> {
     await wipeSession(requestId);
     await finishProviderTab(session);
   } catch (error) {
+    if (!await isLiveSession(session)) return;
     await wipeSession(requestId);
-    deliverError(session, error instanceof Error ? error.message : String(error));
+    deliverError(session, captureErrorMessage(error, session.captured));
   }
 }
 

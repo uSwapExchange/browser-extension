@@ -1,0 +1,38 @@
+{
+  "actionType": "transfer_luxon",
+  "authLink": "https://web.luxon.com/dashboard",
+  "body": "",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "metadataUrl": "https://client-service.luxon.com/api/v4/transfers?page=0&size=10",
+    "metadataUrlBody": "",
+    "metadataUrlMethod": "GET",
+    "method": "GET",
+    "platform": "luxon",
+    "preprocessRegex": "",
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "$.content",
+      "transactionJsonPathSelectors": {
+        "recipient": "$.receiver.label",
+        "amount": "$.receiver.value.amount",
+        "date": "$.createdAt",
+        "paymentId": "$.transferId",
+        "currency": "$.receiver.value.currency",
+        "status": "$.status"
+      }
+    },
+    "urlRegex": "https://client-service.luxon.com/api/v4/transfers\\S+"
+  },
+  "method": "GET",
+  "paramNames": [
+    "TRANSFER_ID"
+  ],
+  "paramSelectors": [
+    {
+      "type": "jsonPath",
+      "value": "$.content[{{INDEX}}].transferId"
+    }
+  ],
+  "url": "https://client-service.luxon.com/api/v4/transfers/{{TRANSFER_ID}}"
+}

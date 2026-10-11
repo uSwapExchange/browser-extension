@@ -1,0 +1,49 @@
+{
+  "actionType": "transfer_n26",
+  "authLink": "https://app.n26.com/",
+  "body": "{{BODY}}",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "POST",
+    "platform": "n26",
+    "preprocessRegex": "",
+    "shouldReplayRequestInPage": true,
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "",
+      "transactionJsonPathSelectors": {
+        "recipient": "$.data.transaction.containers[0].body[0].title",
+        "amount": "$.data.transaction.containers[0].body[0].amount.value",
+        "date": "$.data.transaction.containers[0].body[0].subtitle",
+        "paymentId": "$.data.transaction.containers[1].body[1].action.tracking.property",
+        "currency": "$.data.transaction.containers[0].body[0].amount.money.currency.code"
+      }
+    },
+    "urlRegex": "https://app.n26.com/graphql\\?op=getFeedTransactionQuery",
+    "userInput": {
+      "promptText": "Select a transfer below to proceed with authentication",
+      "transactionXpath": "//section[@id='feed-pending-module']//div[contains(@class,'q1hbnk3w') and contains(@class,'q1hbnk5w')]"
+    }
+  },
+  "method": "POST",
+  "mobile": {
+    "external": {
+      "actionLink": "n26://",
+      "appStoreLink": "https://apps.apple.com/app/id956857223",
+      "playStoreLink": "https://play.google.com/store/apps/details?id=de.number26.android"
+    },
+    "includeAdditionalCookieDomains": [],
+    "useExternalAction": true
+  },
+  "paramNames": [
+    "BODY"
+  ],
+  "paramSelectors": [
+    {
+      "source": "requestBody",
+      "type": "regex",
+      "value": "^(.*)$"
+    }
+  ],
+  "url": "https://app.n26.com/graphql?op=getFeedTransactionQuery"
+}

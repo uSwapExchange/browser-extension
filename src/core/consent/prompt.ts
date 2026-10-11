@@ -19,6 +19,7 @@ export interface PromptRecord {
 }
 
 const PROMPT_PREFIX = 'prompt:';
+const PROMPT_TTL_MS = 5 * 60 * 1000;
 const resolvers = new Map<string, (approved: boolean) => void>();
 
 export async function openPrompt(record: Omit<PromptRecord, 'promptId' | 'createdAt'>): Promise<boolean> {
@@ -26,16 +27,44 @@ export async function openPrompt(record: Omit<PromptRecord, 'promptId' | 'create
   const full: PromptRecord = { ...record, promptId, createdAt: Date.now() };
   await sessionSet(PROMPT_PREFIX + promptId, full);
 
-  const url = chrome.runtime.getURL(`src/prompt/index.html#/${record.kind}?promptId=${promptId}`);
-  await chrome.windows.create({ url, type: 'popup', width: 400, height: 600, focused: true });
-
-  return new Promise<boolean>((resolve) => {
-    resolvers.set(promptId, resolve);
+  // Install the resolver before opening the window: a fast response must not
+  // race windows.create(). Closing the popup is also an explicit cancellation.
+  let decide!: (approved: boolean) => void;
+  const result = new Promise<boolean>((resolve) => { decide = resolve; });
+  let windowId: number | undefined;
+  const closed = (id: number) => {
+    if (id === windowId) void resolvePrompt(promptId, false);
+  };
+  const timer = setTimeout(() => {
+    void resolvePrompt(promptId, false);
+    if (windowId != null) void chrome.windows.remove(windowId).catch(() => {});
+  }, PROMPT_TTL_MS);
+  resolvers.set(promptId, (approved) => {
+    clearTimeout(timer);
+    chrome.windows.onRemoved.removeListener(closed);
+    decide(approved);
   });
+  chrome.windows.onRemoved.addListener(closed);
+  try {
+    const url = chrome.runtime.getURL(`src/prompt/index.html#/${record.kind}?promptId=${promptId}`);
+    const window = await chrome.windows.create({ url, type: 'popup', width: 400, height: 600, focused: true });
+    windowId = window.id;
+    // The user may already have answered before windows.create resolves.
+    if (!resolvers.has(promptId) && windowId != null) {
+      await chrome.windows.remove(windowId).catch(() => {});
+    }
+    return await result;
+  } catch (error) {
+    await resolvePrompt(promptId, false);
+    throw error;
+  }
+
 }
 
 export async function getPrompt(promptId: string): Promise<PromptRecord | null> {
-  return sessionGet<PromptRecord>(PROMPT_PREFIX + promptId);
+  if (!resolvers.has(promptId)) return null;
+  const record = await sessionGet<PromptRecord>(PROMPT_PREFIX + promptId);
+  return record && Date.now() - record.createdAt < PROMPT_TTL_MS ? record : null;
 }
 
 export async function resolvePrompt(promptId: string, approved: boolean): Promise<void> {

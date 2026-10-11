@@ -34,5 +34,6 @@ export function registerModules(ctx: ModuleContext, list: ExtensionModule[]): vo
 }
 
 export function resolveHandler(module: ModuleId, type: string): ModuleHandler | null {
-  return modules.get(module)?.handlers[type] ?? null;
+  const handlers = modules.get(module)?.handlers;
+  return handlers && Object.hasOwn(handlers, type) ? handlers[type] ?? null : null;
 }

@@ -1,3 +1,4 @@
+import { captureTarget, isPlatformUrl } from './target.js';
 import { parseProviderTemplate, type ProviderTemplate } from './types.js';
 
 const TEMPLATE_BASE = 'https://api.zkp2p.xyz/providers';
@@ -51,18 +52,28 @@ export async function resolveTemplate(input: {
   platform: string;
   actionType: string;
   providerConfig?: unknown;
+  permissionPlatform?: string;
 }): Promise<ResolvedTemplate> {
+  const target = captureTarget(input.platform, input.actionType);
+  const validate = (template: ProviderTemplate): ProviderTemplate => {
+    for (const url of [template.authLink, template.url, template.metadata.metadataUrl].filter(Boolean)) {
+      if (!isPlatformUrl(input.permissionPlatform ?? target.permissionPlatform, url!)) {
+        throw new Error('Template URL is outside the selected payment platform');
+      }
+    }
+    return template;
+  };
   if (input.providerConfig != null) {
     return {
       template: normalizePlatformTemplate(
         input.platform,
-        parseProviderTemplate(input.providerConfig),
+        validate(parseProviderTemplate(input.providerConfig)),
       ),
       inline: true,
     };
   }
-  const url = `${TEMPLATE_BASE}/${encodeURIComponent(input.platform)}/${encodeURIComponent(input.actionType)}.json`;
-  const response = await fetch(url, { credentials: 'omit' });
+  const url = `${TEMPLATE_BASE}/${encodeURIComponent(target.platform)}/${encodeURIComponent(target.actionType)}.json`;
+  const response = await fetch(url, { credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(15_000) });
   if (!response.ok) {
     throw new Error(`Failed to load template ${input.platform}/${input.actionType}: HTTP ${response.status}`);
   }
@@ -70,7 +81,7 @@ export async function resolveTemplate(input: {
   return {
     template: normalizePlatformTemplate(
       input.platform,
-      parseProviderTemplate(json),
+      validate(parseProviderTemplate(json)),
     ),
     inline: false,
   };

@@ -2,11 +2,13 @@ import { offscreenCall } from '../../../core/offscreen/rpc.js';
 import { openPrompt } from '../../../core/consent/prompt.js';
 import {
   getSession,
-  putSession,
+  isLiveSession,
+  updateLiveSession,
   wipeSession,
   type CaptureSession,
 } from '../capture/session.js';
 import { resolveMetadataPayload } from '../capture/metadata-engine.js';
+import { captureErrorMessage } from '../capture/error.js';
 import type { PeerMetadataMessage } from '../api-contract.js';
 
 type DeliverFn = (session: CaptureSession, message: PeerMetadataMessage) => void;
@@ -169,7 +171,7 @@ export async function runSellerCapture(requestId: string): Promise<void> {
   if (!session?.captured) return;
 
   try {
-    await putSession({ ...session, status: 'extracting' });
+    if (!await isLiveSession(session) || !await updateLiveSession(session, 'extracting')) return;
     const metadata = await resolveMetadataPayload({
       context: session.captured,
       template: session.template,
@@ -180,8 +182,8 @@ export async function runSellerCapture(requestId: string): Promise<void> {
     }
     const payload = prepareSellerPayload(session, metadata.parsed.json);
 
-    if (session.inline) {
-      await putSession({ ...session, status: 'awaiting_approval' });
+    if (session.inline && !session.inlineApproved) {
+      if (!await updateLiveSession(session, 'awaiting_approval')) return;
       const approved = await openPrompt({
         kind: 'inline-template',
         origin: session.origin,
@@ -195,12 +197,14 @@ export async function runSellerCapture(requestId: string): Promise<void> {
       if (!approved) throw new Error('Capture declined');
     }
 
+    if (!await isLiveSession(session)) return;
     const result = await offscreenCall<{ credentialBundle: unknown }>('create-seller-bundle', {
       platform: session.platform,
       attestationServiceUrl: session.attestationServiceUrl,
       payeeId: payload.payeeId,
       sessionMaterial: payload.sessionMaterial,
     });
+    if (!await isLiveSession(session)) return;
     deliver(session, {
       requestId: session.requestId,
       platform: session.template.metadata.platform,
@@ -214,13 +218,14 @@ export async function runSellerCapture(requestId: string): Promise<void> {
     await wipeSession(requestId);
     await finishProviderTab(session);
   } catch (error) {
+    if (!await isLiveSession(session)) return;
     await wipeSession(requestId);
     deliver(session, {
       requestId: session.requestId,
       platform: session.template.metadata.platform,
       metadata: [],
       expiresAt: session.expiresAt,
-      error: error instanceof Error ? error.message : String(error),
+      error: captureErrorMessage(error, session.captured),
     });
   }
 }

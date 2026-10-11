@@ -81,6 +81,7 @@ async function evalSelector(
       path: resolved,
       json: jsonSource(source, sources) as object,
       wrap: false,
+      eval: false,
     });
   }
   if (selector.type === 'regex') {
@@ -110,7 +111,7 @@ export async function buildParams(
     const name = names[i] ?? `param_${i}`;
     if (!selector) continue;
     const value = await evalSelector(selector, index, sources);
-    if (selector.source === 'requestBody') {
+    if (selector.source === 'requestBody' || selector.source === 'requestHeaders' || selector.source === 'responseHeaders') {
       privateParamNames.push(name);
       privateValues.push(value);
       continue;

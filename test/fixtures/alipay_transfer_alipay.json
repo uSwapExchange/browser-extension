@@ -1,0 +1,33 @@
+{
+  "actionType": "transfer_alipay",
+  "authLink": "https://consumeprod.alipay.com/record/standard.htm",
+  "body": "",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "GET",
+    "platform": "alipay",
+    "preprocessRegex": "",
+    "transactionsExtraction": {
+      "transactionXPathListSelector": "//table[@id='tradeRecordsIndex']//tbody/tr[contains(concat(' ', normalize-space(@class), ' '), ' J-item ') and .//*[@data-link and contains(@data-link,'send/queryTransferDetail.htm')]]",
+      "transactionXPathSelectors": {
+        "amount": "normalize-space(.//td[contains(concat(' ', normalize-space(@class), ' '), ' amount ')]/span[contains(@class, 'amount')])",
+        "paymentId": "normalize-space(substring-before(concat(substring-after(.//*[@data-link and contains(@data-link,'send/queryTransferDetail.htm')][1]/@data-link, 'tradeNo='), '&'), '&'))",
+        "recipient": "normalize-space(substring-before(concat((.//td[contains(concat(' ', normalize-space(@class), ' '), ' other ')]//p[contains(concat(' ', normalize-space(@class), ' '), ' name ')][1] | .//td[contains(concat(' ', normalize-space(@class), ' '), ' name ')]//p[contains(concat(' ', normalize-space(@class), ' '), ' name ')][1])[1], '|'), '|'))",
+        "date": "normalize-space(concat(.//td[contains(concat(' ', normalize-space(@class), ' '), ' time ')]/p[1], ' ', .//td[contains(concat(' ', normalize-space(@class), ' '), ' time ')]/p[2]))"
+      }
+    },
+    "urlRegex": "^https://consumeprod\\.alipay\\.com(?::443)?/record/(?:standard|advanced)\\.htm(?:\\?.*)?$"
+  },
+  "method": "GET",
+  "paramNames": [
+    "TRADE_NO"
+  ],
+  "paramSelectors": [
+    {
+      "type": "xPath",
+      "value": "normalize-space(substring-before(concat(substring-after((//table[@id='tradeRecordsIndex']//tbody/tr[contains(concat(' ', normalize-space(@class), ' '), ' J-item ') and .//*[@data-link and contains(@data-link,'send/queryTransferDetail.htm')]])[{{INDEX}} + 1]//*[@data-link and contains(@data-link,'send/queryTransferDetail.htm')][1]/@data-link, 'tradeNo='), '&'), '&'))"
+    }
+  ],
+  "url": "https://shenghuo.alipay.com/send/queryTransferDetail.htm?tradeNo={{TRADE_NO}}"
+}

@@ -1,0 +1,39 @@
+{
+  "actionType": "transfer_zelle_citi",
+  "authLink": "https://online.citi.com/US/nga/zelle/transfer",
+  "body": "{\"transactionType\":[\"OUTGOING_PAYMENT\",\"SCHEDULED_PAYMENT\"],\"transactionView\":\"LIST_VIEW\",\"transactionStatus\":[\"ALL\"],\"pageOptions\":{\"pageMode\":\"SLICE\",\"page\":1,\"pageSize\":20},\"fetchBlockInfo\":false}",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "metadataUrl": "https://online.citi.com/gcgapi/prod/public/v1/p2ppayments/activityTransactionDetails",
+    "metadataUrlBody": "{\"transactionType\":[\"OUTGOING_PAYMENT\",\"SCHEDULED_PAYMENT\"],\"transactionView\":\"LIST_VIEW\",\"transactionStatus\":[\"ALL\"],\"pageOptions\":{\"pageMode\":\"SLICE\",\"page\":1,\"pageSize\":20},\"fetchBlockInfo\":false}",
+    "metadataUrlMethod": "POST",
+    "method": "POST",
+    "platform": "zelle",
+    "preprocessRegex": "",
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "$.transactionData[0].transactions",
+      "transactionJsonPathSelectors": {
+        "amount": "$.amount",
+        "paymentId": "$.transactionId",
+        "recipient": "$.partyToken",
+        "date": "$.initiationDate",
+        "status": "$.transactionStatus"
+      }
+    },
+    "urlRegex": "https://online.citi.com/gcgapi/prod/public/v1/p2ppayments/activityTransactionDetails"
+  },
+  "method": "POST",
+  "mobile": {
+    "external": {
+      "actionLink": "https://www.citi.com/citi-partner/zelle/login",
+      "appStoreLink": "https://apps.apple.com/us/app/citi-mobile/id301724680",
+      "playStoreLink": "https://play.google.com/store/apps/details?id=com.citi.citimobile"
+    },
+    "includeAdditionalCookieDomains": [],
+    "useExternalAction": true
+  },
+  "paramNames": [],
+  "paramSelectors": [],
+  "url": "https://online.citi.com/gcgapi/prod/public/v1/p2ppayments/activityTransactionDetails"
+}

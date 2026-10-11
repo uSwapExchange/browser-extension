@@ -100,7 +100,9 @@ function Prompt(): React.ReactElement {
     confirmLabel = 'Allow';
   } else if (kind === 'inline-template') {
     title = 'Approve custom capture';
-    body = `This site provided a custom capture template for ${String(detail.platform ?? 'a platform')} (${String(detail.actionType ?? '')}). ${String(detail.rows ?? 0)} transaction(s) were found. Approve to share the encrypted proof.`;
+    body = detail.beforeCapture
+      ? `This site provided a custom capture template for ${String(detail.platform)}. Approve reading its payment history and sharing payment details and an encrypted proof with this site. Your login session remains inside the extension.`
+      : `This site provided a custom capture template for ${String(detail.platform ?? 'a platform')} (${String(detail.actionType ?? '')}). ${String(detail.rows ?? 0)} transaction(s) were found. Approve to share the encrypted proof.`;
     confirmLabel = 'Approve';
   }
 

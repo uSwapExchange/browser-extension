@@ -1,0 +1,58 @@
+{
+  "actionType": "transfer_wise",
+  "authLink": "https://wise.com/all-transactions?direction=OUTGOING",
+  "body": "",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "POST",
+    "platform": "wise",
+    "preprocessRegex": "",
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "$",
+      "transactionJsonPathSelectors": {
+        "amount": "$.primaryAmount",
+        "paymentId": "$.resource.id",
+        "recipient": "$.title",
+        "date": "$.visibleOn",
+        "currency": "$.currency"
+      }
+    },
+    "urlRegex": "https://wise.com/gateway/v1/profiles/\\S+/activities/list"
+  },
+  "method": "GET",
+  "mobile": {
+    "external": {
+      "actionLink": "transferwise://pay/me/{{RECIPIENT_ID}}",
+      "appStoreLink": "https://apps.apple.com/us/app/wise-international-transfers/id612261027",
+      "playStoreLink": "https://play.google.com/store/apps/details?id=com.transferwise.android"
+    },
+    "includeAdditionalCookieDomains": [],
+    "login": {
+      "passwordSelector": "#password, input[name=\"password\"][type=\"password\"], input.cs-password[type=\"password\"]",
+      "revealTimeoutMs": 5000,
+      "submitSelector": "button[type=\"submit\"]",
+      "usernameSelector": "#email, input[name=\"email\"][type=\"email\"], input.cs-email[type=\"email\"]"
+    },
+    "useExternalAction": true,
+    "userAgent": {
+      "android": "Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.207 Mobile Safari/537.36",
+      "ios": "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Safari/605.1.15"
+    }
+  },
+  "paramNames": [
+    "TRANSACTION_ID",
+    "PROFILE_ID"
+  ],
+  "paramSelectors": [
+    {
+      "type": "jsonPath",
+      "value": "$.[{{INDEX}}].resource.id"
+    },
+    {
+      "type": "jsonPath",
+      "value": "$.[{{INDEX}}].ownedByProfile"
+    }
+  ],
+  "url": "https://wise.com/gateway/v3/profiles/{{PROFILE_ID}}/transfers/{{TRANSACTION_ID}}"
+}

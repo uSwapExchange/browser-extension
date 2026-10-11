@@ -44,17 +44,11 @@ const panelSurface = IS_FIREFOX
       },
     };
 
-const webAccessibleResources = IS_FIREFOX
-  ? []
-  : [
-      {
-        resources: ['src/offscreen/offscreen.html'],
-        matches: ['https://app.uswap.net/*'],
-      },
-    ];
+const webAccessibleResources: [] = [];
 
 export default defineManifest({
   manifest_version: 3,
+  ...(!IS_FIREFOX ? { minimum_chrome_version: '114' } : {}),
   name: 'uSwap — Anything in, anything out',
   version: pkg.version,
   description: 'uSwap in your browser — instant crypto swaps, fiat onramp payment capture, and checkout tools.',
@@ -103,6 +97,7 @@ export default defineManifest({
     'https://*.cashapp.com/*',
     'https://*.revolut.com/*',
     'https://*.wise.com/*',
+    'https://x.com/*',
     'https://*.paypal.com/*',
     'https://*.mercadopago.com/*',
     'https://*.mercadopago.com.ar/*',
