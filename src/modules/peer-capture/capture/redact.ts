@@ -41,8 +41,14 @@ export function assertNoPrivateLeak(rows: ExtractedRow[], privateValues: unknown
   for (const row of rows) {
     for (const [field, value] of Object.entries(row)) {
       if (field === 'originalIndex' || field === 'hidden') continue;
-      if (typeof value !== 'string') continue;
-      if (secrets.has(value)) throw new PrivateMaterialLeak(field);
+      const publicStrings = new Set<string>();
+      collectStrings(value, publicStrings);
+      for (const publicValue of publicStrings) {
+        if ([...secrets].some((secret) => publicValue === secret
+          || (secret.length >= 12 && publicValue.includes(secret)))) {
+          throw new PrivateMaterialLeak(field);
+        }
+      }
     }
   }
 }

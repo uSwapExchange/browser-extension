@@ -9,7 +9,7 @@ import type { ExtractedRow, ProviderTemplate } from '../templates/types.js';
  */
 
 function jsonQuery(json: unknown, path: string): unknown {
-  const result = JSONPath({ path, json: json as object, wrap: false });
+  const result = JSONPath({ path, json: json as object, wrap: false, eval: false });
   return result;
 }
 

@@ -11,6 +11,8 @@ import {
   type PeerMetadataMessage,
 } from './api-contract.js';
 import { resolveTemplate } from './templates/fetch.js';
+import { captureTarget, validateAttestationUrl } from './templates/target.js';
+import { clearReplayRules } from './capture/replay.js';
 import { hostsForPlatform } from './templates/platforms.js';
 import {
   clearCaptureRequestCache,
@@ -42,8 +44,11 @@ function senderOrigin(sender: chrome.runtime.MessageSender): string {
 }
 
 let ctx: ModuleContext | null = null;
+const authenticating = new Set<string>();
+let replayRulesReady: Promise<void> = Promise.resolve();
 
 function deliverMetadata(session: CaptureSession, message: PeerMetadataMessage): void {
+  if (message.error) message = { ...message, errorMessage: message.error };
   ctx?.pushToConnection(session.connectionKey, busEvent('peer-capture', PEER_TYPES.metadataMessage, message));
 }
 
@@ -63,6 +68,11 @@ async function ensurePlatformPermission(platform: string, origin: string): Promi
 }
 
 async function startAuthenticate(params: PeerAuthenticateParams, sender: chrome.runtime.MessageSender): Promise<void> {
+  if (!params || typeof params.platform !== 'string' || typeof params.actionType !== 'string') {
+    throw new Error('Payment platform and actionType are required');
+  }
+  const target = captureTarget(params.platform, params.actionType);
+  await replayRulesReady;
   const origin = senderOrigin(sender);
   const connectionKey = connKeyForSender(sender);
   if (!connectionKey) throw new Error('authenticate must originate from a page');
@@ -83,16 +93,30 @@ async function startAuthenticate(params: PeerAuthenticateParams, sender: chrome.
   if (params.captureMode === 'buyerTee' && !suppliedAttestationUrl) {
     throw new Error('buyerTee capture requires attestationServiceUrl');
   }
-  const attestationServiceUrl = suppliedAttestationUrl || DEFAULT_ATTESTATION_SERVICE_URL;
+  const attestationServiceUrl = validateAttestationUrl(suppliedAttestationUrl || DEFAULT_ATTESTATION_SERVICE_URL, origin);
 
-  await ensurePlatformPermission(params.platform, origin);
+  await ensurePlatformPermission(target.permissionPlatform, origin);
   const { template, inline } = await resolveTemplate({
-    platform: params.platform,
-    actionType: params.actionType,
+    platform: target.platform,
+    actionType: target.actionType,
+    permissionPlatform: target.permissionPlatform,
     providerConfig: params.providerConfig,
   });
 
-  const superseded = (await listSessions())
+  if (inline) {
+    const approved = await openPrompt({ kind: 'inline-template', origin, detail: {
+      platform: params.platform, actionType: target.actionType, beforeCapture: true,
+    } });
+    if (!approved) throw new Error('Custom capture declined');
+  }
+  if (!isFirstPartySender(sender) && !await isOriginGranted(origin)) {
+    throw new Error('Connection was revoked during capture setup');
+  }
+  const sessions = await listSessions();
+  if (sessions.filter((session) => session.connectionKey !== connectionKey).length >= 8) {
+    throw new Error('Too many active payment captures. Finish or cancel one, then retry.');
+  }
+  const superseded = sessions
     .filter((session) => session.connectionKey === connectionKey);
   await Promise.all(superseded.map(async (session) => {
     clearCaptureRequestCache(session.requestId);
@@ -114,12 +138,15 @@ async function startAuthenticate(params: PeerAuthenticateParams, sender: chrome.
     connectionKey,
     origin,
     platform: params.platform,
-    actionType: params.actionType,
-    attestationActionType: params.attestationActionType?.trim() || params.actionType,
+    actionPlatform: target.platform,
+    actionType: target.actionType,
+    attestationActionType: params.attestationActionType?.trim() || target.actionType,
     captureMode: params.captureMode,
     attestationServiceUrl,
     template,
     inline,
+    inlineApproved: inline,
+    firstParty: isFirstPartySender(sender),
     sourceTabId: sender.tab?.id ?? null,
     authTabId: authTab.id,
     status: 'awaiting_request',
@@ -188,6 +215,7 @@ export const peerCaptureModule: ExtensionModule = {
     setProviderActivityHandler(async (session, context) => {
       await primeMetadataRequest(session, context);
     });
+    replayRulesReady = clearReplayRules().catch(() => console.warn('[peer-capture] replay rule cleanup failed'));
     registerInterceptor();
     // Payment-platform hosts are optional permissions granted on demand. A
     // webRequest listener registered before the grant won't observe the new
@@ -250,8 +278,13 @@ export const peerCaptureModule: ExtensionModule = {
     },
 
     async [PEER_TYPES.authenticate](payload, sender): Promise<{ accepted: true }> {
-      await startAuthenticate(payload as PeerAuthenticateParams, sender);
-      return { accepted: true };
+      const key = connKeyForSender(sender);
+      if (!key || authenticating.has(key)) throw new Error('A capture request is already being opened');
+      authenticating.add(key);
+      try {
+        await startAuthenticate(payload as PeerAuthenticateParams, sender);
+        return { accepted: true };
+      } finally { authenticating.delete(key); }
     },
   },
 };

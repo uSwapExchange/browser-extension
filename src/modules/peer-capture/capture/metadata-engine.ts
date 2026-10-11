@@ -34,12 +34,13 @@ export async function resolveMetadataPayload(
     context: CapturedRequest;
     template: ProviderTemplate;
     authTabId: number | null;
+    inPage?: boolean;
   },
   replay: MetadataReplay = replayRequest,
 ): Promise<MetadataPayload> {
   const request = resolveReplayRequest(input.context, input.template);
   const response = await replay(request, {
-    inPage: input.template.metadata.shouldReplayRequestInPage === true,
+    inPage: input.inPage ?? input.template.metadata.shouldReplayRequestInPage === true,
     tabId: input.authTabId,
   });
   if (response.status < 200 || response.status >= 300) {

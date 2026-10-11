@@ -186,7 +186,7 @@ describe('buildParams', () => {
     expect(result.privateValues).toEqual(['supersecret']);
   });
 
-  it('extracts params from request and response headers', async () => {
+  it('keeps header-sourced values private, including custom template selectors', async () => {
     const template = parseProviderTemplate({
       ...venmoTemplate,
       paramNames: ['REQUEST_ID', 'RESPONSE_ID'],
@@ -199,10 +199,8 @@ describe('buildParams', () => {
       requestHeaders: { 'x-request-id': 'request-123' },
       responseHeaders: { 'x-response-id': 'response-456' },
     }));
-    expect(result.params).toEqual({
-      REQUEST_ID: 'request-123',
-      RESPONSE_ID: 'response-456',
-    });
+    expect(result.params).toEqual({});
+    expect(result.privateValues).toEqual(['request-123', 'response-456']);
   });
 });
 

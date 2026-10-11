@@ -1,0 +1,54 @@
+{
+  "actionType": "transfer_chime",
+  "authLink": "https://app.chime.com/",
+  "body": "{{BODY}}",
+  "metadata": {
+    "bodyRegex": "\"operationName\":\"GetPayAnyoneActivityDetailsQuery\"",
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "POST",
+    "platform": "chime",
+    "preprocessRegex": "",
+    "shouldReplayRequestInPage": true,
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "",
+      "transactionJsonPathSelectors": {
+        "recipient": "$.data.p2p.p2p_activity.pay_friend.receiver_identifier",
+        "amount": "$.data.p2p.p2p_activity.pay_friend.amount",
+        "date": "$.data.p2p.p2p_activity.timestamp",
+        "paymentId": "$.data.p2p.p2p_activity.pay_friend.id",
+        "status": "$.data.p2p.p2p_activity.ux_status"
+      }
+    },
+    "urlRegex": "https://app\\.chime\\.com/api/graphql",
+    "userInput": {
+      "promptText": "Select a Pay Anyone transaction",
+      "transactionXpath": "//ul[.//a[starts-with(@href, '/accounts/checking/')]]"
+    }
+  },
+  "method": "POST",
+  "mobile": {
+    "external": {
+      "actionLink": "https://app.chime.com/link/qr?u={{RECIPIENT_ID}}",
+      "appStoreLink": "https://apps.apple.com/us/app/chime-mobile-banking/id836215269",
+      "playStoreLink": "https://play.google.com/store/apps/details?id=com.onedebit.chime&hl=en_US"
+    },
+    "includeAdditionalCookieDomains": [],
+    "useExternalAction": true,
+    "userAgent": {
+      "android": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+      "ios": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15"
+    }
+  },
+  "paramNames": [
+    "BODY"
+  ],
+  "paramSelectors": [
+    {
+      "source": "requestBody",
+      "type": "regex",
+      "value": "^(.*)$"
+    }
+  ],
+  "url": "https://app.chime.com/api/graphql"
+}

@@ -15,6 +15,14 @@ const FORBIDDEN_HEADERS = new Set([
   'cookie', 'origin', 'referer', 'user-agent',
   'content-length', 'host', 'connection', 'accept-encoding',
 ]);
+const OMIT_HEADERS = new Set(['content-length', 'host', 'connection', 'accept-encoding']);
+
+export async function clearReplayRules(): Promise<void> {
+  const rules = await chrome.declarativeNetRequest.getSessionRules();
+  await chrome.declarativeNetRequest.updateSessionRules({
+    removeRuleIds: rules.filter((rule) => rule.id >= DNR_RULE_ID_MIN && rule.id <= DNR_RULE_ID_MAX).map((rule) => rule.id),
+  });
+}
 
 const DNR_RULE_ID_MIN = 90_001;
 const DNR_RULE_ID_MAX = 99_999;
@@ -46,6 +54,7 @@ function splitHeaders(headers: Record<string, string>): {
   const safe: Record<string, string> = {};
   const forbidden: Record<string, string> = {};
   for (const [name, value] of Object.entries(headers)) {
+    if (OMIT_HEADERS.has(name.toLowerCase()) || name.toLowerCase().startsWith('sec-')) continue;
     if (FORBIDDEN_HEADERS.has(name.toLowerCase()) || name.toLowerCase().startsWith('sec-')) {
       forbidden[name] = value;
     } else {
@@ -77,7 +86,11 @@ async function withForbiddenHeaders<T>(
         id: ruleId,
         priority: 1,
         action: { type: 'modifyHeaders' as chrome.declarativeNetRequest.RuleActionType, requestHeaders },
-        condition: { urlFilter: url, resourceTypes: ['xmlhttprequest' as chrome.declarativeNetRequest.ResourceType] },
+        condition: {
+          regexFilter: `^${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+          initiatorDomains: [new URL(chrome.runtime.getURL('')).hostname],
+          resourceTypes: ['xmlhttprequest' as chrome.declarativeNetRequest.ResourceType],
+        },
       }],
     });
     return await run();
@@ -171,6 +184,8 @@ async function replayRequestInPage(
           method,
           headers,
           credentials: 'include',
+          redirect: 'error',
+          signal: AbortSignal.timeout(30_000),
           ...(requestBody ? { body: requestBody } : {}),
         });
         return {
@@ -215,6 +230,8 @@ export async function replayRequest(
     method: captured.method,
     headers: safe,
     credentials: 'include',
+    redirect: 'error',
+    signal: AbortSignal.timeout(30_000),
   };
   if (captured.method.toUpperCase() !== 'GET' && captured.body) {
     init.body = captured.body;

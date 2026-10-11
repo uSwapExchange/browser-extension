@@ -1,0 +1,58 @@
+{
+  "actionType": "transfer_paypal",
+  "authLink": "https://www.paypal.com/myaccount/activities/",
+  "body": "",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "metadataUrl": "https://www.paypal.com/myaccount/activities/filter/?q=ZnJlZV90ZXh0X3NlYXJjaD0mc3RhcnRfZGF0ZT0yMDI1LTAxLTAxJmVuZF9kYXRlPTIwMzAtMTItMzEmdHlwZT0mc3RhdHVzPSZjdXJyZW5jeT0mZmlsdGVyX2lkPSZpc3N1YW5jZV9wcm9kdWN0X25hbWU9JmFzc2V0X25hbWVzPSZhc3NldF9zeW1ib2xzPQ",
+    "metadataUrlBody": "",
+    "metadataUrlMethod": "GET",
+    "method": "GET",
+    "platform": "paypal",
+    "preprocessRegex": "<pre[^>]*>([\\s\\S]*?)<\\/pre>",
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "$.data.data.activity.transactions",
+      "transactionJsonPathSelectors": {
+        "recipient": "$.ftsSearchInfo.email",
+        "amount": "$.ftsSearchInfo.displayAmount",
+        "date": "$.date.rawDate.date",
+        "paymentId": "$.id",
+        "currency": "$.amounts.currencyCode",
+        "type": "$.type"
+      }
+    },
+    "urlRegex": "https://www.paypal.com/myaccount/activities/extendSession"
+  },
+  "method": "GET",
+  "mobile": {
+    "external": {
+      "actionLink": "https://paypal.me/{{RECIPIENT_ID}}/{{AMOUNT}}{{CURRENCY}}",
+      "appStoreLink": "https://apps.apple.com/us/app/paypal-pay-send-save/id283646709",
+      "playStoreLink": "https://play.google.com/store/apps/details?id=com.paypal.android.p2pmobile&hl=en_US"
+    },
+    "includeAdditionalCookieDomains": [],
+    "login": {
+      "nextSelector": "#btnNext, button[name=\"btnNext\"][type=\"submit\"]",
+      "passwordSelector": "#password, input[name=\"login_password\"][type=\"password\"]",
+      "revealTimeoutMs": 5000,
+      "submitSelector": "#btnLogin, button[name=\"btnLogin\"], button.actionContinue[value=\"Login\"], button[value=\"Login\"][type=\"submit\"]",
+      "usernameSelector": "#email, input[name=\"login_email\"][type=\"email\"]"
+    },
+    "useExternalAction": true,
+    "userAgent": {
+      "android": "Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.207 Mobile Safari/537.36",
+      "ios": "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Safari/605.1.15"
+    }
+  },
+  "paramNames": [
+    "PAYMENT_ID"
+  ],
+  "paramSelectors": [
+    {
+      "type": "jsonPath",
+      "value": "$.data.data.activity.transactions[{{INDEX}}].id"
+    }
+  ],
+  "url": "https://www.paypal.com/myaccount/activities/details/inline/{{PAYMENT_ID}}"
+}

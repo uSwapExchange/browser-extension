@@ -19,6 +19,7 @@ export const PLATFORM_HOSTS: Record<string, PlatformHosts> = {
   venmo: { patterns: ['https://*.venmo.com/*'], baked: false },
   cashapp: { patterns: ['https://*.cash.app/*', 'https://*.cashapp.com/*'], baked: false },
   revolut: { patterns: ['https://*.revolut.com/*'], baked: false },
+  xmoney: { patterns: ['https://x.com/*'], baked: false },
   wise: { patterns: ['https://*.wise.com/*'], baked: false },
   paypal: { patterns: ['https://*.paypal.com/*'], baked: false },
   mercadopago: {
@@ -36,7 +37,7 @@ export const PLATFORM_HOSTS: Record<string, PlatformHosts> = {
 };
 
 export function hostsForPlatform(platform: string): PlatformHosts | null {
-  return PLATFORM_HOSTS[platform] ?? null;
+  return Object.hasOwn(PLATFORM_HOSTS, platform) ? PLATFORM_HOSTS[platform]! : null;
 }
 
 /** Match patterns for every known platform — the webRequest filter superset. */

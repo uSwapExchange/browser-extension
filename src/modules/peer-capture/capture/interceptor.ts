@@ -1,9 +1,9 @@
+import { captureTarget, isPlatformUrl } from '../templates/target.js';
 import { IS_FIREFOX } from '../../../core/target.js';
 import { allCapturePatterns } from '../templates/platforms.js';
 import {
   findSessionByAuthTab,
-  getSession,
-  putSession,
+  captureRequest,
   type CapturedRequest,
   type CaptureSession,
 } from './session.js';
@@ -119,7 +119,7 @@ function relevant(details: {
 }
 
 function inSessionScope(session: CaptureSession, url: string): boolean {
-  return (
+  return isPlatformUrl(captureTarget(session.platform, session.actionType).permissionPlatform, url) && (
     matchesConfiguredRequest(session.template, url)
     || matchesTemplateOrigin(session.template, url)
   );
@@ -224,10 +224,8 @@ const onResponseStartedListener = (
       timestamp: context.timestamp ?? Date.now(),
       contextKind: selected.kind,
     };
-    const current = await getSession(session.requestId);
-    if (!current || current.status !== 'awaiting_request') return;
-    const updated: CaptureSession = { ...current, captured, status: 'captured' };
-    await putSession(updated);
+    const updated = await captureRequest(session, captured);
+    if (!updated) return;
     requestCache.clear(session.requestId);
     onCaptureComplete?.(updated);
   });

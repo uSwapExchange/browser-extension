@@ -1,0 +1,48 @@
+{
+  "actionType": "transfer_monzo",
+  "authLink": "https://web.monzo.com/",
+  "body": "",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "GET",
+    "platform": "monzo",
+    "preprocessRegex": "",
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "$.transactions",
+      "transactionJsonPathSelectors": {
+        "recipient": "$.counterparty.user_id",
+        "recipientName": "$.counterparty.name",
+        "amount": "$.amount",
+        "date": "$.settled",
+        "paymentId": "$.id",
+        "currency": "$.currency"
+      }
+    },
+    "urlRegex": "https://internal-api.monzo.com//?minimal-banking/transactions\\?account_id=\\S+&limit=50"
+  },
+  "method": "GET",
+  "mobile": {
+    "external": {
+      "actionLink": "https://monzo.me/{{RECIPIENT_ID}}",
+      "appStoreLink": "https://apps.apple.com/us/app/monzo-mobile-banking/id1052238659",
+      "playStoreLink": "https://play.google.com/store/apps/details?id=co.uk.getmondo&hl=en_US"
+    },
+    "includeAdditionalCookieDomains": [],
+    "useExternalAction": true,
+    "userAgent": {
+      "android": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+      "ios": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15"
+    }
+  },
+  "paramNames": [
+    "TX_ID"
+  ],
+  "paramSelectors": [
+    {
+      "type": "jsonPath",
+      "value": "$.transactions[{{INDEX}}].id"
+    }
+  ],
+  "url": "https://api.monzo.com/transactions/{{TX_ID}}"
+}

@@ -1,0 +1,41 @@
+{
+  "actionType": "transfer_xmoney",
+  "authLink": "https://x.com/i/money/transactions",
+  "body": "",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "GET",
+    "platform": "xmoney",
+    "preprocessRegex": "",
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "",
+      "transactionJsonPathSelectors": {
+        "recipient": "$.data.get_transaction_result_by_id.details.receiver_results.result.core.screen_name",
+        "amount": "$.data.get_transaction_result_by_id.amount_local_micro",
+        "date": "$.data.get_transaction_result_by_id.presentation.timestamp",
+        "paymentId": "$.data.get_transaction_result_by_id.id",
+        "currency": "$.data.get_transaction_result_by_id.currency",
+        "state": "$.data.get_transaction_result_by_id.transaction_status",
+        "type": "$.data.get_transaction_result_by_id.transaction_type",
+        "direction": "$.data.get_transaction_result_by_id.presentation.amount_direction"
+      }
+    },
+    "urlRegex": "^https://x\\.com/i/api/graphql/[^/]+/usePaymentsTransactionQuery(?:\\?.*)?$",
+    "userInput": {
+      "promptText": "Select a completed X Money payment",
+      "transactionXpath": "//div[@data-testid='activity-list']"
+    }
+  },
+  "method": "GET",
+  "paramNames": [
+    "TRANSACTION_ID"
+  ],
+  "paramSelectors": [
+    {
+      "type": "jsonPath",
+      "value": "$.data.get_transaction_result_by_id.id"
+    }
+  ],
+  "url": "https://x.com/i/api/graphql/8n79CqolfdtpJHGlJ-lxQg/usePaymentsTransactionQuery?variables=%7B%22transaction_id%22%3A%22{{TRANSACTION_ID}}%22%7D"
+}

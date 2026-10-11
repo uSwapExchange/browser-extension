@@ -41,10 +41,14 @@ export interface PeerMetadataMessage {
   requestId: string;
   platform: string;
   metadata: PeerMetadataRow[];
+  /** Canonical proof target; platform remains compatible with the caller. */
+  actionPlatform?: string;
+  actionType?: string;
   expiresAt: number;
   buyerTeeCapture?: PeerBuyerTeeCapture;
   sarCredentialCapture?: PeerSarCredentialCapture;
   error?: string;
+  errorMessage?: string;
 }
 
 export interface PeerPageApi {

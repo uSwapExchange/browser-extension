@@ -6,7 +6,7 @@ import manifest from './manifest.config.js';
 const TARGET: 'chrome' | 'firefox' =
   process.env.EXT_TARGET === 'firefox' ? 'firefox' : 'chrome';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   define: {
     __EXT_TARGET__: JSON.stringify(TARGET),
   },
@@ -23,7 +23,7 @@ export default defineConfig({
         // Firefox runs the shared crypto/DOM handlers in its background event
         // page, so only Chrome needs the offscreen document build input.
         ...(TARGET === 'chrome' ? { offscreen: 'src/offscreen/offscreen.html' } : {}),
-        harness: 'src/dev/harness.html',
+        ...(command === 'serve' ? { harness: 'src/dev/harness.html' } : {}),
       },
     },
   },
@@ -32,4 +32,4 @@ export default defineConfig({
     strictPort: true,
     hmr: { port: 5190 },
   },
-});
+}));

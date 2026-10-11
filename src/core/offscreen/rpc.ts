@@ -50,11 +50,7 @@ export interface OffscreenResponse {
   error?: string;
 }
 
-let counter = 0;
-function nextId(): string {
-  counter += 1;
-  return `osc-${counter}`;
-}
+function nextId(): string { return crypto.randomUUID(); }
 
 export async function offscreenCall<T>(
   type: OffscreenRequest['type'],
@@ -78,12 +74,16 @@ export async function offscreenCall<T>(
   const id = nextId();
   const request = { target: 'offscreen', type, id, payload } as OffscreenRequest;
 
-  const response = (await Promise.race([
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let response: OffscreenResponse;
+  try {
+    response = (await Promise.race([
     chrome.runtime.sendMessage(request),
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`offscreen ${type} timed out`)), timeoutMs),
+      timer = setTimeout(() => reject(new Error(`offscreen ${type} timed out`)), timeoutMs),
     ),
-  ])) as OffscreenResponse;
+    ])) as OffscreenResponse;
+  } finally { clearTimeout(timer); }
 
   if (!response || response.target !== 'offscreen-result' || response.id !== id) {
     throw new Error(`Malformed offscreen response for ${type}`);

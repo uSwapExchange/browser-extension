@@ -41,6 +41,9 @@ export class ProviderRequestCache {
       ...patch,
       requestId: browserRequestId,
     } as ProviderRequestRecord;
+    if (!session.has(browserRequestId) && session.size >= 200) {
+      session.delete(session.keys().next().value!);
+    }
     session.set(browserRequestId, merged);
     return merged;
   }

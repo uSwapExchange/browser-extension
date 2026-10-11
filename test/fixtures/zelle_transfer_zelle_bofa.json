@@ -1,0 +1,42 @@
+{
+  "actionType": "transfer_zelle_bofa",
+  "authLink": "https://secure.bankofamerica.com/pay-transfer-pay-portal/?request_locale=en-us&returnSiteIndicator=GAIMW&target=paymentactivity#/",
+  "body": "{\"filterV1\":{\"dateFilter\":{\"timeframeForHistory\":\"DEFAULTDAYS\"}},\"sortCriteriaV1\":{\"fieldName\":\"DATE\",\"order\":\"DESCENDING\"},\"pageInfo\":{\"pageNum\":1,\"pageSize\":\"\"}}",
+  "metadata": {
+    "fallbackMethod": "GET",
+    "fallbackUrlRegex": "https://secure.bankofamerica.com/myaccounts/omni/rest/CommunicationBarkerCount",
+    "method": "POST",
+    "platform": "zelle",
+    "preprocessRegex": "",
+    "shouldReplayRequestInPage": true,
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "$.completedTransactions",
+      "transactionJsonPathSelectors": {
+        "recipient": "$.targetAccount.displayName",
+        "amount": "$.amount",
+        "date": "$.transactionDate",
+        "paymentId": "$.confirmationNumber",
+        "status": "$.status",
+        "aliasToken": "$.targetAccount.aliasToken"
+      }
+    },
+    "urlRegex": "https://secure.bankofamerica.com/ogateway/payment-activity/api/v4/activity"
+  },
+  "method": "POST",
+  "mobile": {
+    "external": {
+      "actionLink": "bofa://movemoney",
+      "appStoreLink": "https://apps.apple.com/us/app/bank-of-america-mobile-banking/id284847138",
+      "playStoreLink": "https://play.google.com/store/apps/details?id=com.infonow.bofa"
+    },
+    "includeAdditionalCookieDomains": [],
+    "useExternalAction": true,
+    "userAgent": {
+      "android": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+      "ios": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+    }
+  },
+  "paramNames": [],
+  "paramSelectors": [],
+  "url": "https://secure.bankofamerica.com/ogateway/payment-activity/api/v4/activity"
+}
