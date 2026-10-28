@@ -49,8 +49,11 @@ export function extractJsonRows(template: ProviderTemplate, responseJson: unknow
   if (!listSelector) return [rowFromJson(responseJson, 0, fieldSelectors)];
 
   const list = jsonQuery(responseJson, listSelector);
+  // Detail endpoints can select one object (for example Monobank statement/get).
+  if (list && typeof list === 'object' && !Array.isArray(list)) {
+    return [rowFromJson(list, 0, fieldSelectors)];
+  }
   if (!Array.isArray(list)) return [];
-
   return list.map((item, originalIndex) => rowFromJson(item, originalIndex, fieldSelectors));
 }
 

@@ -1,0 +1,31 @@
+{
+  "actionType": "register_wise",
+  "authLink": "https://wise.com/flows/request",
+  "body": "",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "GET",
+    "platform": "wise",
+    "preprocessRegex": "",
+    "transactionsExtraction": {
+      "transactionJsonPathListSelector": "",
+      "transactionJsonPathSelectors": {
+        "wiseTag": "$.nickname"
+      }
+    },
+    "urlRegex": "https://wise.com/gateway/v1/profiles/[0-9]+/identifiers/profile-link$"
+  },
+  "method": "GET",
+  "paramNames": [
+    "PROFILE_ID"
+  ],
+  "paramSelectors": [
+    {
+      "source": "url",
+      "type": "regex",
+      "value": "https://wise.com/gateway/v1/profiles/([0-9]+)/identifiers/profile-link$"
+    }
+  ],
+  "url": "https://wise.com/gateway/v4/profiles/{{PROFILE_ID}}/multi-currency-account"
+}

@@ -104,6 +104,8 @@ export default defineManifest({
     'https://*.monzo.com/*',
     'https://*.n26.com/*',
     'https://*.alipay.com/*',
+    'https://www.amazon.in/*',
+    'https://web.monobank.ua/*',
     'https://*.chime.com/*',
     'https://*.luxon.com/*',
     'https://*.chase.com/*',

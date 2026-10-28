@@ -259,3 +259,16 @@ app. These declarations describe existing behavior; capture logic is unchanged.
 Firefox requires acceptance of these data permissions when installing/updating.
 Matching readable source and reproducible build instructions must accompany
 the minified Firefox package submitted to AMO.
+
+## 0.6.14 — Payment capture compatibility
+
+Adds the published PayPal Business identity/transfer actions and Amazon Pay UPI
+actions. Amazon India and Monobank web access are optional permissions requested
+only for the selected capture. Monobank's transaction-detail response can now
+produce a single metadata row. Session headers and private body fields remain
+inside the encrypted capture; no inbox connection is added.
+
+Checked against Peer's public example extension at
+`8dac150f9cbe924c33cef47cd2abb4d4638eefaa` and the published provider templates.
+Both browser builds share the implementation. A passing capture/build check is
+not a claim of real-account payment acceptance or a change to provider policy.
