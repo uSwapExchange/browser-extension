@@ -11,7 +11,10 @@ export function captureTarget(platform: string, actionType: string) {
     }
     return { platform: 'zelle', actionType: `transfer_zelle_${bank}`, permissionPlatform: `zelle-${bank}` };
   }
-  if (!hostsForPlatform(platform) || ![ `transfer_${platform}`, `register_${platform}` ].includes(actionType)) {
+  const actions = [`transfer_${platform}`, `register_${platform}`];
+  if (platform === 'paypal') actions.push('transfer_business_paypal', 'register_business_paypal');
+  if (platform === 'upi') actions.push('transfer_upi_amazonpay', 'register_upi_amazonpay');
+  if (!hostsForPlatform(platform) || !actions.includes(actionType)) {
     throw new Error('Unsupported payment platform/action');
   }
   return { platform, actionType, permissionPlatform: platform };

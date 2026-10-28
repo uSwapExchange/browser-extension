@@ -28,6 +28,8 @@ export const PLATFORM_HOSTS: Record<string, PlatformHosts> = {
   },
   monzo: { patterns: ['https://*.monzo.com/*'], baked: false },
   n26: { patterns: ['https://*.n26.com/*'], baked: false },
+  upi: { patterns: ['https://www.amazon.in/*'], baked: false },
+  monobank: { patterns: ['https://web.monobank.ua/*'], baked: false },
   alipay: { patterns: ['https://*.alipay.com/*'], baked: false },
   chime: { patterns: ['https://*.chime.com/*'], baked: false },
   luxon: { patterns: ['https://*.luxon.com/*'], baked: false },
