@@ -15,7 +15,7 @@ export type OffscreenRequest =
         platform: string;
         actionType: string;
         attestationServiceUrl: string;
-        sessionMaterial: Record<string, string>;
+        sessionMaterial: Record<string, unknown>;
       };
     }
   | {

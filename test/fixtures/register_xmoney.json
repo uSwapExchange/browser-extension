@@ -1,0 +1,21 @@
+{
+  "actionType": "register_xmoney",
+  "authLink": "https://x.com/i/money/balance",
+  "body": "\u0000\u0000\u0000\u0000\u0000",
+  "captureJsEnabled": true,
+  "captureJs": "// X Money's own GetCustomer request from its web client (2026-11-06); the empty request asks for the session's\n// customer. The attestor replays it with the encrypted session, requires send permission and signs the customer's\n// X handle. This program forwards nothing from the response.\nconst CUSTOMER_URL = 'https://money.x.com/api/web/orchestrator.service.v1beta1.OrchestratorService/GetCustomer';\n\nfunction match({ request }) {\n  return request.method === 'POST' && request.url === CUSTOMER_URL && request.body === String.fromCharCode(0, 0, 0, 0, 0);\n}\n\nfunction capture({ event, params }) {\n  // Keep listening through failed or signed-out requests.\n  if (!match({ request: event.request }) || event.response.status !== 200) return null;\n  if (!event.response.body) return null;\n  if (event.response.bodyEncoding !== 'base64') throw new Error('Binary capture update required');\n  const text = event.response.body;\n  // Like transfer_xmoney, require a complete unary gRPC-Web response and a successful trailer.\n  if (typeof text !== 'string' || text.length === 0 || text.length > 2666668 ||\n    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) return null;\n  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';\n  const padding = text.endsWith('==') ? 2 : text.endsWith('=') ? 1 : 0;\n  const bytes = new Uint8Array(text.length / 4 * 3 - padding);\n  if (bytes.length > 2000000) return null;\n  let offset = 0;\n  for (let i = 0; i < text.length; i += 4) {\n    const a = alphabet.indexOf(text[i]), b = alphabet.indexOf(text[i + 1]);\n    const c = text[i + 2] === '=' ? 0 : alphabet.indexOf(text[i + 2]);\n    const d = text[i + 3] === '=' ? 0 : alphabet.indexOf(text[i + 3]);\n    bytes[offset++] = a * 4 + (b >> 4);\n    if (text[i + 2] !== '=') bytes[offset++] = (b & 15) * 16 + (c >> 2);\n    else if ((b & 15) !== 0) return null;\n    if (text[i + 3] !== '=') bytes[offset++] = (c & 3) * 64 + d;\n    else if ((c & 3) !== 0) return null;\n  }\n  offset = 0;\n  let hasMessage = false, hasTrailer = false;\n  while (offset < bytes.length) {\n    if (offset + 5 > bytes.length) return null;\n    const flag = bytes[offset];\n    const length = new DataView(bytes.buffer, offset + 1, 4).getUint32(0);\n    offset += 5;\n    if (offset + length > bytes.length) return null;\n    const payload = bytes.subarray(offset, offset + length);\n    offset += length;\n    if (flag === 0) {\n      if (hasMessage || length === 0) return null;\n      hasMessage = true;\n    } else {\n      if (flag !== 128 || !hasMessage || offset !== bytes.length) return null;\n      let trailer = '';\n      for (const byte of payload) trailer += String.fromCharCode(byte);\n      const statuses = trailer.split('\\r\\n').filter(line => line.toLowerCase().startsWith('grpc-status:'));\n      if (statuses.length !== 1 || statuses[0].slice(12).trim() !== '0') return null;\n      hasTrailer = true;\n    }\n  }\n  if (!hasTrailer) return null;\n  if (Object.keys(params).length === 0) return [{ capture: 'xmoney', params: {}, originalIndex: 0, hidden: false }];\n  if (Object.keys(params).length !== 1 || params.index !== 0) {\n    throw new Error('Use empty capture params for metadata, or supply { \"index\": 0 }.');\n  }\n  return { index: 0 };\n}\n",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "POST",
+    "platform": "xmoney",
+    "preprocessRegex": "",
+    "shouldSkipCloseTab": true,
+    "transactionsExtraction": {},
+    "urlRegex": "^https://money\\.x\\.com/api/web/orchestrator\\.service\\.v1beta1\\.OrchestratorService/GetCustomer$"
+  },
+  "method": "POST",
+  "paramNames": [],
+  "paramSelectors": [],
+  "url": "https://money.x.com/api/web/orchestrator.service.v1beta1.OrchestratorService/GetCustomer"
+}

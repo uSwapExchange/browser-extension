@@ -35,6 +35,7 @@ export interface CaptureSession {
   actionPlatform?: string;
   actionType: string;
   attestationActionType: string;
+  captureParams?: Record<string, string>;
   captureMode: PeerCaptureMode;
   attestationServiceUrl: string;
   template: ProviderTemplate;

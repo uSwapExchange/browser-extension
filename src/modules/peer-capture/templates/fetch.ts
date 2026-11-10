@@ -20,7 +20,7 @@ export function normalizePlatformTemplate(
   platform: string,
   template: ProviderTemplate,
 ): ProviderTemplate {
-  if (platform !== 'revolut') return template;
+  if (platform !== 'revolut' || template.actionType?.startsWith('register_')) return template;
   return {
     ...template,
     authLink: REVOLUT_ALL_POCKETS_AUTH_LINK,

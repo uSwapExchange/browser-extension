@@ -7,6 +7,8 @@ import { assertBuyerMetadataPrivacy } from '../capture/redact.js';
 import { captureErrorMessage } from '../capture/error.js';
 import { prepareBuyerRows, unusableRowsMessage } from '../capture/buyer-rows.js';
 import { resolveMetadataPayload } from '../capture/metadata-engine.js';
+import { captureProgram, verifyCaptureProgram } from '../capture/programs.js';
+import { buyerSessionMaterial } from '../capture/session-material.js';
 import {
   getSession,
   isLiveSession,
@@ -54,10 +56,26 @@ export async function runBuyerCapture(requestId: string): Promise<void> {
 
   try {
     if (!await isLiveSession(session) || !await updateLiveSession(session, 'extracting')) return;
+    await verifyCaptureProgram(session.template);
     const readRows = async (inPage?: boolean) => {
       const payload = await resolveMetadataPayload({
         context: session.captured!, template: session.template, authTabId: session.authTabId, inPage,
       });
+      const program = captureProgram(session.template);
+      if (program) {
+        const metadata = program.capture({ event: {
+          request: { method: payload.request.method, url: payload.request.url, body: payload.request.body },
+          response: { status: payload.response.status, body: payload.response.text, bodyEncoding: payload.response.bodyEncoding },
+        }, params: session.captureParams ?? {} });
+        if (!Array.isArray(metadata) || metadata.some(row => !row || !Number.isSafeInteger(row.originalIndex)
+          || row.originalIndex < 0 || !row.params || typeof row.params !== 'object')) {
+          throw new Error('The account capture was incomplete. Refresh the provider page and retry.');
+        }
+        assertBuyerMetadataPrivacy({ rows: metadata, platform: session.platform, inline: session.inline,
+          headers: session.captured!.headers, secretHeaders: session.template.secretHeaders, privateValues: [],
+        });
+        return metadata;
+      }
       const rows = await extractRows(session.template, payload.parsed.text, payload.parsed.json);
       const sources: CaptureSources = {
         responseJson: payload.parsed.json, responseText: payload.parsed.text,
@@ -120,8 +138,7 @@ export async function runBuyerCapture(requestId: string): Promise<void> {
 
     if (!await isLiveSession(session)) return;
     // Encrypt the captured session material in the offscreen document.
-    const sessionMaterial: Record<string, string> = { ...session.captured.headers };
-    if (session.captured.body) sessionMaterial.body = session.captured.body;
+    const sessionMaterial = buyerSessionMaterial(session);
     const { encryptedSessionMaterial } = await offscreenCall<{ encryptedSessionMaterial: string }>(
       'encrypt-buyer-tee',
       {

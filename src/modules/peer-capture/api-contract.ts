@@ -19,6 +19,8 @@ export interface PeerAuthenticateParams {
   attestationActionType?: string;
   /** Inline provider template — requires explicit user approval before results post. */
   providerConfig?: unknown;
+  /** Public account input required by a hosted identity template (Monzo.me). */
+  captureParams?: Record<string, string>;
 }
 
 export interface PeerMetadataRow {

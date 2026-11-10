@@ -11,6 +11,7 @@ import {
   type PeerMetadataMessage,
 } from './api-contract.js';
 import { resolveTemplate } from './templates/fetch.js';
+import { verifyCaptureProgram } from './capture/programs.js';
 import { captureTarget, validateAttestationUrl } from './templates/target.js';
 import { clearReplayRules } from './capture/replay.js';
 import { hostsForPlatform } from './templates/platforms.js';
@@ -102,6 +103,15 @@ async function startAuthenticate(params: PeerAuthenticateParams, sender: chrome.
     permissionPlatform: target.permissionPlatform,
     providerConfig: params.providerConfig,
   });
+  await verifyCaptureProgram(template);
+  let captureParams: Record<string, string> = {};
+  if (target.actionType === 'register_monzo') {
+    const handle = params.captureParams?.MONZO_ME_HANDLE;
+    if (typeof handle !== 'string' || !/^[a-z0-9_-]{1,100}$/i.test(handle.trim())) {
+      throw new Error('Enter your Monzo.me handle before verifying.');
+    }
+    captureParams = { MONZO_ME_HANDLE: handle.trim().toLowerCase() };
+  }
 
   if (inline) {
     const approved = await openPrompt({ kind: 'inline-template', origin, detail: {
@@ -141,6 +151,7 @@ async function startAuthenticate(params: PeerAuthenticateParams, sender: chrome.
     actionPlatform: target.platform,
     actionType: target.actionType,
     attestationActionType: params.attestationActionType?.trim() || target.actionType,
+    captureParams,
     captureMode: params.captureMode,
     attestationServiceUrl,
     template,
