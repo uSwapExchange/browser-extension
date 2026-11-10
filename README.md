@@ -260,6 +260,19 @@ Firefox requires acceptance of these data permissions when installing/updating.
 Matching readable source and reproducible build instructions must accompany
 the minified Firefox package submitted to AMO.
 
+## 0.6.15 — Account registration and X Money capture
+
+- Supports Peer account registration for Cash App, Venmo, Revolut, Chime,
+  Monzo and X Money, including accounts with no payments.
+- Accepts a Monzo.me handle through `captureParams.MONZO_ME_HANDLE`.
+- Reads X Money's binary payment history while preserving original row indices,
+  payment identifiers, amounts, currencies and recipients.
+- Requests optional access to `money.x.com` for X Money's current API.
+- Provider capture programs are reviewed and bundled with the extension. A
+  changed remote program requires an extension update; downloaded JavaScript
+  is never evaluated. Private session material stays encrypted across the page
+  boundary.
+
 ## 0.6.14 — Payment capture compatibility
 
 Adds the published PayPal Business identity/transfer actions and Amazon Pay UPI

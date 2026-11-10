@@ -19,7 +19,7 @@ export const PLATFORM_HOSTS: Record<string, PlatformHosts> = {
   venmo: { patterns: ['https://*.venmo.com/*'], baked: false },
   cashapp: { patterns: ['https://*.cash.app/*', 'https://*.cashapp.com/*'], baked: false },
   revolut: { patterns: ['https://*.revolut.com/*'], baked: false },
-  xmoney: { patterns: ['https://x.com/*'], baked: false },
+  xmoney: { patterns: ['https://x.com/*', 'https://money.x.com/*'], baked: false },
   wise: { patterns: ['https://*.wise.com/*'], baked: false },
   paypal: { patterns: ['https://*.paypal.com/*'], baked: false },
   mercadopago: {

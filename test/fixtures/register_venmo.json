@@ -1,0 +1,21 @@
+{
+  "actionType": "register_venmo",
+  "authLink": "https://account.venmo.com/?feed=mine",
+  "body": "",
+  "captureJsEnabled": true,
+  "captureJs": "function match({ request, params }) {\n  return request.method === 'GET' && /^https:\\/\\/account\\.venmo\\.com\\/api\\/stories\\?/.test(request.url) && /[?&]feedType=me(?:&|$)/.test(request.url);\n}\n\nfunction capture({ event, params }) {\n  if (event.request.method !== 'GET' || !/^https:\\/\\/account\\.venmo\\.com\\/api\\/stories\\?/.test(event.request.url)) return null;\n  if (!/[?&]feedType=me(?:&|$)/.test(event.request.url) || event.response.status !== 200 || !event.response.body) return null;\n  const sender = event.request.url.match(/[?&]externalId=([^&#]+)/);\n  if (!sender || !Array.isArray(JSON.parse(event.response.body).stories)) return null;\n  const senderId = decodeURIComponent(sender[1]);\n  return selectResult([{ accountId: senderId, params: { SENDER_ID: senderId }, originalIndex: 0, hidden: false }], params);\n}\n\nfunction selectResult(rows, params) {\n  if (Object.keys(params).length === 0) return rows;\n  if (Object.keys(params).length !== 1 || !Number.isSafeInteger(params.index) || params.index < 0) {\n    throw new Error('Use empty capture params for metadata, or supply { \"index\": 0 }.');\n  }\n  const row = rows.find((item) => item.originalIndex === params.index);\n  return row ? { ...row.params, index: row.originalIndex } : null;\n}",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "GET",
+    "platform": "venmo",
+    "preprocessRegex": "",
+    "shouldSkipCloseTab": false,
+    "transactionsExtraction": {},
+    "urlRegex": "^https://account\\.venmo\\.com/api/stories\\?"
+  },
+  "method": "GET",
+  "paramNames": [],
+  "paramSelectors": [],
+  "url": "https://account.venmo.com/api/stories?feedType=me&externalId={{SENDER_ID}}"
+}

@@ -1,0 +1,21 @@
+{
+  "actionType": "register_revolut",
+  "authLink": "https://app.revolut.com/home",
+  "body": "",
+  "captureJsEnabled": true,
+  "captureJs": "const CURRENT_USER_URL = \"https://app.revolut.com/api/retail/user/current\";\n\nfunction match({ request }) {\n  // HEAD polls share this URL but carry no identity body.\n  return request.method === \"GET\" && request.url === CURRENT_USER_URL;\n}\n\nfunction capture({ event, params }) {\n  if (!match({ request: event.request })) return null;\n  if (event.response.status !== 200 || !event.response.body) return null;\n  const user = JSON.parse(event.response.body).user;\n  if (typeof user !== \"object\" || user === null) throw new Error(\"Revolut current-user response has no user.\");\n  const revtag = typeof user.username === \"string\" ? user.username.trim() : \"\";\n  if (!revtag) throw new Error(\"Create a Revtag in Revolut before verifying.\");\n  // Display only: the attestor refetches this endpoint with the encrypted session and signs its Revtag.\n  return selectResult([{ revtag, params: {}, originalIndex: 0, hidden: false }], params);\n}\n\nfunction selectResult(rows, params) {\n  if (Object.keys(params).length === 0) return rows;\n  if (Object.keys(params).length !== 1 || !Number.isSafeInteger(params.index) || params.index < 0) {\n    throw new Error('Use empty capture params for metadata, or supply { \"index\": 0 }.');\n  }\n  const row = rows.find((item) => item.originalIndex === params.index);\n  return row ? { ...row.params, index: row.originalIndex } : null;\n}",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "GET",
+    "platform": "revolut",
+    "preprocessRegex": "",
+    "shouldSkipCloseTab": false,
+    "transactionsExtraction": {},
+    "urlRegex": "^https://app\\.revolut\\.com/api/retail/user/current$"
+  },
+  "method": "GET",
+  "paramNames": [],
+  "paramSelectors": [],
+  "url": "https://app.revolut.com/api/retail/user/current"
+}

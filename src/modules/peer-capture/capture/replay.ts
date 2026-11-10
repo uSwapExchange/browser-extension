@@ -108,6 +108,7 @@ export interface ReplayResult {
   text: string;
   json: unknown;
   headers: Record<string, string>;
+  bodyEncoding?: 'base64';
 }
 
 function replayResult(
@@ -188,10 +189,20 @@ async function replayRequestInPage(
           signal: AbortSignal.timeout(30_000),
           ...(requestBody ? { body: requestBody } : {}),
         });
+        const binary = response.headers.get('content-type')?.includes('grpc-web') === true;
+        let text: string;
+        if (binary) {
+          const bytes = new Uint8Array(await response.arrayBuffer());
+          if (bytes.length > 2_000_000) throw new Error('Binary evidence exceeds limit');
+          let raw = '';
+          for (const byte of bytes) raw += String.fromCharCode(byte);
+          text = btoa(raw);
+        } else text = await response.text();
         return {
           ok: true as const,
           status: response.status,
-          text: await response.text(),
+          text,
+          bodyEncoding: binary ? 'base64' as const : undefined,
           headers: Object.fromEntries(response.headers.entries()),
         };
       } catch (error) {
@@ -212,7 +223,7 @@ async function replayRequestInPage(
   const result = results[0]?.result;
   if (!result) throw new Error('In-page replay did not return a result');
   if (!result.ok) throw new Error(`In-page replay failed: ${result.error}`);
-  return replayResult(result.status, result.text, result.headers ?? {});
+  return { ...replayResult(result.status, result.text, result.headers ?? {}), bodyEncoding: result.bodyEncoding };
 }
 
 export async function replayRequest(
@@ -239,6 +250,12 @@ export async function replayRequest(
 
   const replayUrl = captured.url;
   const response = await withForbiddenHeaders(replayUrl, forbidden, () => fetch(replayUrl, init));
-  const text = await response.text();
-  return replayResult(response.status, text, headersFromResponse(response));
+  if (response.headers.get('content-type')?.includes('grpc-web')) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length > 2_000_000) throw new Error('Binary evidence exceeds limit');
+    let raw = '';
+    for (const byte of bytes) raw += String.fromCharCode(byte);
+    return { ...replayResult(response.status, btoa(raw), headersFromResponse(response)), bodyEncoding: 'base64' };
+  }
+  return replayResult(response.status, await response.text(), headersFromResponse(response));
 }

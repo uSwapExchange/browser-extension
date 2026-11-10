@@ -98,6 +98,7 @@ export default defineManifest({
     'https://*.revolut.com/*',
     'https://*.wise.com/*',
     'https://x.com/*',
+    'https://money.x.com/*',
     'https://*.paypal.com/*',
     'https://*.mercadopago.com/*',
     'https://*.mercadopago.com.ar/*',

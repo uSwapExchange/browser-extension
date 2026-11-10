@@ -1,4 +1,5 @@
 import type { ProviderTemplate } from '../templates/types.js';
+import { captureProgram } from './programs.js';
 
 export type ProviderResourceType = `${chrome.webRequest.ResourceType}`;
 
@@ -101,7 +102,10 @@ export function selectProviderContext(
   template: ProviderTemplate,
 ): { kind: 'primary' | 'fallback'; request: ProviderRequestRecord } | null {
   const { metadata } = template;
-  const primary = requests.find((request) => matchesRequestCriteria(
+  const program = captureProgram(template);
+  const primary = requests.find((request) => (!program || program.match({ request: {
+    method: request.method, url: request.url, body: sessionRequestBody(request),
+  }, params: {} })) && matchesRequestCriteria(
     request,
     metadata.method ?? template.method,
     metadata.urlRegex,

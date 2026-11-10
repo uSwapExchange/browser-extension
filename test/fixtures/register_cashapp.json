@@ -1,0 +1,21 @@
+{
+  "actionType": "register_cashapp",
+  "authLink": "https://cash.app/account/activity",
+  "body": "",
+  "captureJsEnabled": true,
+  "captureJs": "function match({ request, params }) {\n  if (request.method !== 'POST' || request.url !== 'https://cash.app/cash-app/activity/v1.0/page' || !request.body) return false;\n  try {\n    const payload = JSON.parse(request.body);\n    return payload.activity_token?.activity_token_type === 'CUSTOMER_TOKEN' && payload.activity_scope === 'MY_ACTIVITY_WEB_V2' &&\n      !!payload.request_context && Object.keys(payload.request_context).length === 0;\n  } catch { return false; }\n}\n\nfunction capture({ event, params }) {\n  if (event.request.method !== 'POST' || event.request.url !== 'https://cash.app/cash-app/activity/v1.0/page') return null;\n  if (event.response.status !== 200 || !event.response.body || !event.request.body) return null;\n  const request = JSON.parse(event.request.body);\n  if (request.activity_token?.activity_token_type !== 'CUSTOMER_TOKEN' || request.activity_scope !== 'MY_ACTIVITY_WEB_V2') return null;\n  if (!request.request_context || Object.keys(request.request_context).length !== 0) return null;\n  if (!Array.isArray(JSON.parse(event.response.body).activity_rows)) return null;\n  return selectResult([{ capture: 'cashapp', params: {}, originalIndex: 0, hidden: false }], params);\n}\n\nfunction selectResult(rows, params) {\n  if (Object.keys(params).length === 0) return rows;\n  if (Object.keys(params).length !== 1 || !Number.isSafeInteger(params.index) || params.index < 0) {\n    throw new Error('Use empty capture params for metadata, or supply { \"index\": 0 }.');\n  }\n  const row = rows.find((item) => item.originalIndex === params.index);\n  return row ? { ...row.params, index: row.originalIndex } : null;\n}",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "POST",
+    "platform": "cashapp",
+    "preprocessRegex": "",
+    "shouldSkipCloseTab": false,
+    "transactionsExtraction": {},
+    "urlRegex": "^https://cash\\.app/cash-app/activity/v1\\.0/page$"
+  },
+  "method": "POST",
+  "paramNames": [],
+  "paramSelectors": [],
+  "url": "https://cash.app/cash-app/activity/v1.0/page"
+}

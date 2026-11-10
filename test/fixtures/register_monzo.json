@@ -1,0 +1,21 @@
+{
+  "actionType": "register_monzo",
+  "authLink": "https://web.monzo.com/",
+  "body": "",
+  "captureJsEnabled": true,
+  "captureJs": "const TRANSACTIONS_URL = /^https:\\/\\/internal-api\\.monzo\\.com\\/\\/?minimal-banking\\/transactions\\?account_id=[^&#]+&limit=50$/;\n\nfunction match({ request }) {\n  return request.method === \"GET\" && TRANSACTIONS_URL.test(request.url);\n}\n\nfunction capture({ event, params }) {\n  if (!match({ request: event.request })) return null;\n  if (event.response.status !== 200 || !event.response.body) return null;\n  const payload = JSON.parse(event.response.body);\n  if (!payload || !Array.isArray(payload.transactions)) throw new Error(\"Invalid Monzo transactions response.\");\n  const handle = typeof params.MONZO_ME_HANDLE === \"string\" ? params.MONZO_ME_HANDLE.trim().toLowerCase() : \"\";\n  if (!/^[a-z0-9_-]+$/.test(handle)) throw new Error(\"Enter your Monzo.me handle before verifying.\");\n  // Capture the session even for an empty account. The attestor proves ownership, not this transaction list.\n  return [{ handle, params: { MONZO_ME_HANDLE: handle }, originalIndex: 0, hidden: false }];\n}",
+  "metadata": {
+    "fallbackMethod": "",
+    "fallbackUrlRegex": "",
+    "method": "GET",
+    "platform": "monzo",
+    "preprocessRegex": "",
+    "shouldSkipCloseTab": false,
+    "transactionsExtraction": {},
+    "urlRegex": "^https://internal-api\\.monzo\\.com//?minimal-banking/transactions\\?account_id=[^&#]+&limit=50$"
+  },
+  "method": "GET",
+  "paramNames": [],
+  "paramSelectors": [],
+  "url": "https://internal-api.monzo.com/minimal-banking/transactions"
+}
